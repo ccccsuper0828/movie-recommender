@@ -8,6 +8,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import ast
+import os
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -16,6 +17,9 @@ from sklearn.metrics.pairwise import cosine_similarity, linear_kernel
 from sklearn.preprocessing import MinMaxScaler
 from scipy.sparse import csr_matrix
 from scipy.sparse.linalg import svds
+
+# 获取当前脚本所在目录
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # 页面配置
 st.set_page_config(
@@ -76,9 +80,12 @@ st.markdown("""
 @st.cache_data
 def load_and_preprocess_data():
     """加载和预处理数据"""
-    # 加载数据
-    movies = pd.read_csv('tmdb_5000_movies.csv')
-    credits = pd.read_csv('tmdb_5000_credits.csv')
+    # 加载数据 - 使用绝对路径确保在任何环境下都能找到文件
+    movies_path = os.path.join(SCRIPT_DIR, 'tmdb_5000_movies.csv')
+    credits_path = os.path.join(SCRIPT_DIR, 'tmdb_5000_credits.csv')
+
+    movies = pd.read_csv(movies_path)
+    credits = pd.read_csv(credits_path)
 
     # 辅助函数
     def safe_literal_eval(x):
