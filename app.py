@@ -12,11 +12,24 @@ import os
 import warnings
 warnings.filterwarnings('ignore')
 
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')
+
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity, linear_kernel
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, MultiLabelBinarizer
+from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.model_selection import train_test_split
 from scipy.sparse import csr_matrix
 from scipy.sparse.linalg import svds
+
+# SHAP导入
+try:
+    import shap
+    SHAP_AVAILABLE = True
+except ImportError:
+    SHAP_AVAILABLE = False
 
 # 获取当前脚本所在目录
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -274,6 +287,202 @@ def get_hybrid_recommendations(title, movies, content_sim, metadata_sim, cf_sim,
     return recommendations
 
 
+# ==================== SHAP可解释性函数 ====================
+
+@st.cache_resource
+def build_shap_explainer(_movies, _similarity_matrix):
+    """
+    构建SHAP解释器（缓存）
+    """
+    if not SHAP_AVAILABLE:
+        return None, None, None, None
+
+    # 准备特征矩阵
+    genre_encoder = MultiLabelBinarizer()
+    genres = _movies['genres_list'].apply(lambda x: x if isinstance(x, list) else [])
+    genre_encoded = genre_encoder.fit_transform(genres)
+    genre_names = [f"类型_{g}" for g in genre_encoder.classes_]
+
+    vote_avg = _movies['vote_average'].fillna(0).values.reshape(-1, 1)
+    popularity = _movies['popularity'].fillna(0).values.reshape(-1, 1)
+    cast_count = _movies['cast_list'].apply(lambda x: len(x) if isinstance(x, list) else 0).values.reshape(-1, 1)
+    keyword_count = _movies['keywords_list'].apply(lambda x: len(x) if isinstance(x, list) else 0).values.reshape(-1, 1)
+
+    feature_matrix = np.hstack([genre_encoded, vote_avg, popularity, cast_count, keyword_count])
+    feature_names = genre_names + ['评分', '热度', '演员数', '关键词数']
+
+    # 准备训练数据
+    n_movies = len(_movies)
+    n_samples = 20000
+    np.random.seed(42)
+    idx1 = np.random.randint(0, n_movies, n_samples)
+    idx2 = np.random.randint(0, n_movies, n_samples)
+    mask = idx1 != idx2
+    idx1, idx2 = idx1[mask], idx2[mask]
+
+    X, y = [], []
+    for i1, i2 in zip(idx1, idx2):
+        f1, f2 = feature_matrix[i1], feature_matrix[i2]
+        X.append(np.concatenate([np.abs(f1-f2), f1*f2]))
+        y.append(_similarity_matrix[i1, i2])
+
+    X, y = np.array(X), np.array(y)
+    pair_names = [f"{n}_差异" for n in feature_names] + [f"{n}_匹配" for n in feature_names]
+
+    # 训练模型
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    model = GradientBoostingRegressor(n_estimators=50, max_depth=4, random_state=42)
+    model.fit(X_train, y_train)
+
+    # 创建SHAP解释器
+    explainer = shap.TreeExplainer(model)
+
+    return explainer, model, feature_matrix, pair_names
+
+
+def create_shap_waterfall_fig(shap_values, base_value, feature_names, title="SHAP Waterfall"):
+    """创建SHAP瀑布图"""
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    # 获取top特征
+    indices = np.argsort(np.abs(shap_values))[::-1][:15]
+    values = shap_values[indices]
+    names = [feature_names[i][:20] for i in indices]
+
+    # 计算累积值
+    cumsum = np.cumsum(values)
+
+    colors = ['#ff0051' if v > 0 else '#008bfb' for v in values]
+
+    y_pos = np.arange(len(values))
+    ax.barh(y_pos, values, color=colors, height=0.7)
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(names)
+    ax.invert_yaxis()
+    ax.axvline(x=0, color='black', linewidth=0.5)
+    ax.set_xlabel('SHAP Value')
+    ax.set_title(title)
+
+    # 添加图例
+    from matplotlib.patches import Patch
+    legend_elements = [
+        Patch(facecolor='#ff0051', label='增加相似度'),
+        Patch(facecolor='#008bfb', label='降低相似度')
+    ]
+    ax.legend(handles=legend_elements, loc='lower right')
+
+    plt.tight_layout()
+    return fig
+
+
+def create_shap_summary_fig(shap_values, X, feature_names, title="SHAP Summary"):
+    """创建SHAP Summary图"""
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    # 计算特征重要性（平均绝对SHAP值）
+    importance = np.abs(shap_values).mean(axis=0)
+    indices = np.argsort(importance)[::-1][:20]
+
+    values = importance[indices]
+    names = [feature_names[i][:20] for i in indices]
+
+    colors = plt.cm.RdYlBu_r(np.linspace(0.2, 0.8, len(values)))
+
+    y_pos = np.arange(len(values))
+    ax.barh(y_pos, values, color=colors, height=0.7)
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(names)
+    ax.invert_yaxis()
+    ax.set_xlabel('Mean |SHAP Value|')
+    ax.set_title(title)
+
+    plt.tight_layout()
+    return fig
+
+
+def create_shap_force_fig(shap_values, base_value, feature_names, predicted_value, title=""):
+    """创建SHAP力场图"""
+    fig, ax = plt.subplots(figsize=(12, 3))
+
+    # 分离正负值
+    positive_mask = shap_values > 0
+    negative_mask = shap_values < 0
+
+    indices = np.argsort(np.abs(shap_values))[::-1][:10]
+
+    # 绘制条形
+    left_pos = base_value
+    left_neg = base_value
+
+    for idx in indices:
+        val = shap_values[idx]
+        if val > 0:
+            ax.barh(0, val, left=left_pos, color='#ff0051', height=0.5, alpha=0.8)
+            left_pos += val
+        else:
+            ax.barh(0, val, left=left_neg, color='#008bfb', height=0.5, alpha=0.8)
+            left_neg += val
+
+    ax.axvline(x=base_value, color='gray', linestyle='--', label=f'Base: {base_value:.3f}')
+    ax.axvline(x=predicted_value, color='black', linestyle='-', linewidth=2, label=f'Pred: {predicted_value:.3f}')
+
+    ax.set_yticks([])
+    ax.set_xlabel('Similarity Score')
+    ax.set_title(title)
+    ax.legend(loc='upper right')
+
+    plt.tight_layout()
+    return fig
+
+
+def get_shap_explanation(source_title, target_title, movies, similarity_matrix,
+                          explainer, model, feature_matrix, pair_names):
+    """获取SHAP解释"""
+    if explainer is None:
+        return None
+
+    title_to_idx = pd.Series(movies.index, index=movies['title']).to_dict()
+    source_idx = title_to_idx.get(source_title)
+    target_idx = title_to_idx.get(target_title)
+
+    if source_idx is None or target_idx is None:
+        return None
+
+    # 创建特征
+    f1, f2 = feature_matrix[source_idx], feature_matrix[target_idx]
+    X = np.concatenate([np.abs(f1-f2), f1*f2]).reshape(1, -1)
+
+    # 计算SHAP值
+    shap_values = explainer.shap_values(X)[0]
+    base_value = explainer.expected_value
+    if isinstance(base_value, np.ndarray):
+        base_value = float(base_value[0])
+
+    predicted = model.predict(X)[0]
+    actual = similarity_matrix[source_idx, target_idx]
+
+    # 分析贡献
+    shap_df = pd.DataFrame({
+        'feature': pair_names,
+        'shap_value': shap_values
+    })
+    shap_df['abs_shap'] = np.abs(shap_df['shap_value'])
+    shap_df = shap_df.sort_values('abs_shap', ascending=False)
+
+    positive = shap_df[shap_df['shap_value'] > 0.001].head(5)
+    negative = shap_df[shap_df['shap_value'] < -0.001].head(5)
+
+    return {
+        'shap_values': shap_values,
+        'base_value': base_value,
+        'predicted': predicted,
+        'actual': actual,
+        'positive': positive,
+        'negative': negative,
+        'X': X
+    }
+
+
 # ==================== 可解释性函数 ====================
 
 def get_explanation(source_movie, target_movie, movies):
@@ -491,11 +700,12 @@ def main():
         # 推荐结果标签页
         st.markdown("## 🎯 推荐结果")
 
-        tab1, tab2, tab3, tab4 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
             "📝 基于内容",
             "🏷️ 基于元数据",
             "👥 协同过滤",
-            "🔀 混合推荐"
+            "🔀 混合推荐",
+            "🔬 SHAP解释"
         ])
 
         with tab1:
@@ -541,6 +751,157 @@ def main():
                 weights, top_n
             )
             display_recommendations(hybrid_recs, "混合推荐", selected_movie, movies)
+
+        with tab5:
+            st.markdown("""
+            <div class="method-header">
+            <b>SHAP可解释性分析:</b> 使用SHAP (SHapley Additive exPlanations) 解释推荐原因，
+            基于博弈论的Shapley值公平分配每个特征的贡献
+            </div>
+            """, unsafe_allow_html=True)
+
+            if not SHAP_AVAILABLE:
+                st.error("SHAP库未安装，请运行: pip install shap")
+            else:
+                # 构建SHAP解释器
+                with st.spinner("正在构建SHAP解释器..."):
+                    shap_explainer, shap_model, feature_matrix, pair_names = build_shap_explainer(
+                        movies, metadata_similarity
+                    )
+
+                if shap_explainer is not None:
+                    # 选择要解释的推荐电影
+                    st.markdown("### 选择要解释的推荐")
+
+                    if metadata_recs is not None and len(metadata_recs) > 0:
+                        target_options = metadata_recs['title'].tolist()[:10]
+                        selected_target = st.selectbox(
+                            "选择一部推荐电影进行SHAP分析",
+                            options=target_options,
+                            key="shap_target"
+                        )
+
+                        if selected_target:
+                            # 获取SHAP解释
+                            shap_result = get_shap_explanation(
+                                selected_movie, selected_target, movies, metadata_similarity,
+                                shap_explainer, shap_model, feature_matrix, pair_names
+                            )
+
+                            if shap_result:
+                                # 显示基本信息
+                                st.markdown("### 📊 相似度分析")
+                                col1, col2, col3 = st.columns(3)
+                                with col1:
+                                    st.metric("实际相似度", f"{shap_result['actual']:.2%}")
+                                with col2:
+                                    st.metric("模型预测", f"{shap_result['predicted']:.2%}")
+                                with col3:
+                                    st.metric("基准值", f"{shap_result['base_value']:.4f}")
+
+                                # 显示正负贡献
+                                st.markdown("### 🔍 特征贡献分析")
+                                col1, col2 = st.columns(2)
+
+                                with col1:
+                                    st.markdown("**✅ 正向贡献 (增加相似度)**")
+                                    if len(shap_result['positive']) > 0:
+                                        for _, row in shap_result['positive'].iterrows():
+                                            st.success(f"{row['feature']}: +{row['shap_value']:.4f}")
+                                    else:
+                                        st.info("无显著正向贡献")
+
+                                with col2:
+                                    st.markdown("**❌ 负向贡献 (降低相似度)**")
+                                    if len(shap_result['negative']) > 0:
+                                        for _, row in shap_result['negative'].iterrows():
+                                            st.error(f"{row['feature']}: {row['shap_value']:.4f}")
+                                    else:
+                                        st.info("无显著负向贡献")
+
+                                # SHAP可视化
+                                st.markdown("### 📈 SHAP可视化")
+
+                                viz_tab1, viz_tab2, viz_tab3 = st.tabs([
+                                    "瀑布图 (Waterfall)",
+                                    "力场图 (Force)",
+                                    "特征重要性 (Summary)"
+                                ])
+
+                                with viz_tab1:
+                                    st.markdown("**瀑布图**: 展示每个特征如何从基准值推动预测结果")
+                                    fig_waterfall = create_shap_waterfall_fig(
+                                        shap_result['shap_values'],
+                                        shap_result['base_value'],
+                                        pair_names,
+                                        f"SHAP Waterfall: {selected_movie} → {selected_target}"
+                                    )
+                                    st.pyplot(fig_waterfall)
+                                    plt.close(fig_waterfall)
+
+                                with viz_tab2:
+                                    st.markdown("**力场图**: 展示正负贡献的拉锯效果")
+                                    fig_force = create_shap_force_fig(
+                                        shap_result['shap_values'],
+                                        shap_result['base_value'],
+                                        pair_names,
+                                        shap_result['predicted'],
+                                        f"SHAP Force: {selected_movie} → {selected_target}"
+                                    )
+                                    st.pyplot(fig_force)
+                                    plt.close(fig_force)
+
+                                with viz_tab3:
+                                    st.markdown("**全局特征重要性**: 计算所有样本的平均SHAP贡献")
+                                    # 计算多个样本的SHAP值
+                                    with st.spinner("计算全局特征重要性..."):
+                                        # 采样计算
+                                        n_samples = min(200, len(movies))
+                                        sample_indices = np.random.choice(len(movies), n_samples, replace=False)
+                                        source_idx = movies[movies['title'] == selected_movie].index[0]
+
+                                        X_samples = []
+                                        for idx in sample_indices:
+                                            if idx != source_idx:
+                                                f1 = feature_matrix[source_idx]
+                                                f2 = feature_matrix[idx]
+                                                X_samples.append(np.concatenate([np.abs(f1-f2), f1*f2]))
+
+                                        if X_samples:
+                                            X_samples = np.array(X_samples)
+                                            shap_values_all = shap_explainer.shap_values(X_samples)
+
+                                            fig_summary = create_shap_summary_fig(
+                                                shap_values_all,
+                                                X_samples,
+                                                pair_names,
+                                                f"SHAP Feature Importance for {selected_movie}"
+                                            )
+                                            st.pyplot(fig_summary)
+                                            plt.close(fig_summary)
+
+                                # 解释说明
+                                with st.expander("💡 如何解读SHAP图?"):
+                                    st.markdown("""
+                                    **SHAP值解读:**
+                                    - **正值 (红色)**: 该特征增加了两部电影的相似度
+                                    - **负值 (蓝色)**: 该特征降低了两部电影的相似度
+                                    - **绝对值大小**: 表示该特征影响的强度
+
+                                    **特征含义:**
+                                    - `XXX_差异`: 两部电影在该特征上的差异程度
+                                    - `XXX_匹配`: 两部电影在该特征上的匹配程度（同时拥有）
+
+                                    **示例:**
+                                    - `类型_Action_匹配` 值为正 → 两部电影都是动作片，增加相似度
+                                    - `评分_差异` 值为负 → 两部电影评分差异大，降低相似度
+                                    """)
+                            else:
+                                st.warning("无法生成SHAP解释")
+                    else:
+                        st.info("请先获取推荐结果")
+                else:
+                    st.error("SHAP解释器初始化失败")
 
         # 三种方法对比
         st.markdown("---")
