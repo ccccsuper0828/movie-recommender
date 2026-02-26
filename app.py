@@ -1,7 +1,7 @@
 """
-电影推荐系统 - Streamlit Web Demo
-===================================
-三种机器学习推荐方法的交互式演示界面
+Movie Recommendation System - Streamlit Web Demo
+=================================================
+Interactive demo for three ML-based recommendation methods
 """
 
 import streamlit as st
@@ -24,25 +24,25 @@ from sklearn.model_selection import train_test_split
 from scipy.sparse import csr_matrix
 from scipy.sparse.linalg import svds
 
-# SHAP导入
+# SHAP import
 try:
     import shap
     SHAP_AVAILABLE = True
 except ImportError:
     SHAP_AVAILABLE = False
 
-# 获取当前脚本所在目录
+# Get current script directory
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# 页面配置
+# Page configuration
 st.set_page_config(
-    page_title="电影推荐系统",
+    page_title="Movie Recommender",
     page_icon="🎬",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# 自定义CSS样式
+# Custom CSS styles
 st.markdown("""
 <style>
     .main-header {
@@ -88,19 +88,17 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# ==================== 数据加载和预处理 ====================
+# ==================== Data Loading and Preprocessing ====================
 
 @st.cache_data
 def load_and_preprocess_data():
-    """加载和预处理数据"""
-    # 加载数据 - 使用绝对路径确保在任何环境下都能找到文件
+    """Load and preprocess data"""
     movies_path = os.path.join(SCRIPT_DIR, 'tmdb_5000_movies.csv')
     credits_path = os.path.join(SCRIPT_DIR, 'tmdb_5000_credits.csv')
 
     movies = pd.read_csv(movies_path)
     credits = pd.read_csv(credits_path)
 
-    # 辅助函数
     def safe_literal_eval(x):
         try:
             return ast.literal_eval(x)
@@ -131,32 +129,32 @@ def load_and_preprocess_data():
             return str.lower(x.replace(" ", ""))
         return ''
 
-    # 合并数据集
+    # Merge datasets
     credits.columns = ['id', 'title', 'cast', 'crew']
     movies = movies.merge(credits[['id', 'cast', 'crew']], on='id')
 
-    # 解析JSON字段
+    # Parse JSON fields
     for col in ['genres', 'keywords', 'cast', 'crew']:
         movies[col] = movies[col].apply(safe_literal_eval)
 
-    # 提取特征
+    # Extract features
     movies['genres_list'] = movies['genres'].apply(get_list)
     movies['keywords_list'] = movies['keywords'].apply(get_list)
     movies['cast_list'] = movies['cast'].apply(get_top_cast)
     movies['director'] = movies['crew'].apply(get_director)
 
-    # 清理文本
+    # Clean text
     movies['genres_clean'] = movies['genres_list'].apply(clean_text)
     movies['keywords_clean'] = movies['keywords_list'].apply(clean_text)
     movies['cast_clean'] = movies['cast_list'].apply(clean_text)
     movies['director_clean'] = movies['director'].apply(clean_text)
 
-    # 处理缺失值
+    # Handle missing values
     movies['overview'] = movies['overview'].fillna('')
     movies['release_date'] = movies['release_date'].fillna('')
     movies['runtime'] = movies['runtime'].fillna(0)
 
-    # 重置索引
+    # Reset index
     movies = movies.reset_index(drop=True)
 
     return movies
@@ -164,7 +162,7 @@ def load_and_preprocess_data():
 
 @st.cache_data
 def build_content_similarity(_movies):
-    """构建基于内容的相似度矩阵"""
+    """Build content-based similarity matrix"""
     tfidf = TfidfVectorizer(stop_words='english', max_features=5000, ngram_range=(1, 2))
     tfidf_matrix = tfidf.fit_transform(_movies['overview'])
     return linear_kernel(tfidf_matrix, tfidf_matrix)
@@ -172,7 +170,7 @@ def build_content_similarity(_movies):
 
 @st.cache_data
 def build_metadata_similarity(_movies):
-    """构建基于元数据的相似度矩阵"""
+    """Build metadata-based similarity matrix"""
     def create_soup(row):
         features = []
         features.extend(row['genres_clean'] * 3)
@@ -190,7 +188,7 @@ def build_metadata_similarity(_movies):
 
 @st.cache_data
 def build_cf_similarity(_movies, n_users=500):
-    """构建协同过滤相似度矩阵"""
+    """Build collaborative filtering similarity matrix"""
     n_movies = len(_movies)
     ratings = np.zeros((n_users, n_movies))
 
@@ -236,10 +234,10 @@ def build_cf_similarity(_movies, n_users=500):
     return cosine_similarity(movie_user_matrix), ratings
 
 
-# ==================== 推荐函数 ====================
+# ==================== Recommendation Functions ====================
 
 def get_recommendations(title, movies, similarity_matrix, top_n=10):
-    """获取推荐结果"""
+    """Get recommendations"""
     title_to_idx = pd.Series(movies.index, index=movies['title']).to_dict()
 
     if title not in title_to_idx:
@@ -260,7 +258,7 @@ def get_recommendations(title, movies, similarity_matrix, top_n=10):
 
 
 def get_hybrid_recommendations(title, movies, content_sim, metadata_sim, cf_sim, weights, top_n=10):
-    """获取混合推荐结果"""
+    """Get hybrid recommendations"""
     title_to_idx = pd.Series(movies.index, index=movies['title']).to_dict()
 
     if title not in title_to_idx:
@@ -287,21 +285,19 @@ def get_hybrid_recommendations(title, movies, content_sim, metadata_sim, cf_sim,
     return recommendations
 
 
-# ==================== SHAP可解释性函数 ====================
+# ==================== SHAP Explainability Functions ====================
 
 @st.cache_resource
 def build_shap_explainer(_movies, _similarity_matrix):
-    """
-    构建SHAP解释器（缓存）
-    """
+    """Build SHAP explainer (cached)"""
     if not SHAP_AVAILABLE:
         return None, None, None, None
 
-    # 准备特征矩阵
+    # Prepare feature matrix
     genre_encoder = MultiLabelBinarizer()
     genres = _movies['genres_list'].apply(lambda x: x if isinstance(x, list) else [])
     genre_encoded = genre_encoder.fit_transform(genres)
-    genre_names = [f"类型_{g}" for g in genre_encoder.classes_]
+    genre_names = [f"Genre_{g}" for g in genre_encoder.classes_]
 
     vote_avg = _movies['vote_average'].fillna(0).values.reshape(-1, 1)
     popularity = _movies['popularity'].fillna(0).values.reshape(-1, 1)
@@ -309,9 +305,9 @@ def build_shap_explainer(_movies, _similarity_matrix):
     keyword_count = _movies['keywords_list'].apply(lambda x: len(x) if isinstance(x, list) else 0).values.reshape(-1, 1)
 
     feature_matrix = np.hstack([genre_encoded, vote_avg, popularity, cast_count, keyword_count])
-    feature_names = genre_names + ['评分', '热度', '演员数', '关键词数']
+    feature_names = genre_names + ['Rating', 'Popularity', 'CastCount', 'KeywordCount']
 
-    # 准备训练数据
+    # Prepare training data
     n_movies = len(_movies)
     n_samples = 20000
     np.random.seed(42)
@@ -327,30 +323,27 @@ def build_shap_explainer(_movies, _similarity_matrix):
         y.append(_similarity_matrix[i1, i2])
 
     X, y = np.array(X), np.array(y)
-    pair_names = [f"{n}_差异" for n in feature_names] + [f"{n}_匹配" for n in feature_names]
+    pair_names = [f"{n}_Diff" for n in feature_names] + [f"{n}_Match" for n in feature_names]
 
-    # 训练模型
+    # Train model
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     model = GradientBoostingRegressor(n_estimators=50, max_depth=4, random_state=42)
     model.fit(X_train, y_train)
 
-    # 创建SHAP解释器
+    # Create SHAP explainer
     explainer = shap.TreeExplainer(model)
 
     return explainer, model, feature_matrix, pair_names
 
 
 def create_shap_waterfall_fig(shap_values, base_value, feature_names, title="SHAP Waterfall"):
-    """创建SHAP瀑布图"""
+    """Create SHAP waterfall plot"""
     fig, ax = plt.subplots(figsize=(10, 8))
 
-    # 获取top特征
+    # Get top features
     indices = np.argsort(np.abs(shap_values))[::-1][:15]
     values = shap_values[indices]
     names = [feature_names[i][:20] for i in indices]
-
-    # 计算累积值
-    cumsum = np.cumsum(values)
 
     colors = ['#ff0051' if v > 0 else '#008bfb' for v in values]
 
@@ -363,11 +356,11 @@ def create_shap_waterfall_fig(shap_values, base_value, feature_names, title="SHA
     ax.set_xlabel('SHAP Value')
     ax.set_title(title)
 
-    # 添加图例
+    # Add legend
     from matplotlib.patches import Patch
     legend_elements = [
-        Patch(facecolor='#ff0051', label='增加相似度'),
-        Patch(facecolor='#008bfb', label='降低相似度')
+        Patch(facecolor='#ff0051', label='Increases Similarity'),
+        Patch(facecolor='#008bfb', label='Decreases Similarity')
     ]
     ax.legend(handles=legend_elements, loc='lower right')
 
@@ -376,10 +369,10 @@ def create_shap_waterfall_fig(shap_values, base_value, feature_names, title="SHA
 
 
 def create_shap_summary_fig(shap_values, X, feature_names, title="SHAP Summary"):
-    """创建SHAP Summary图"""
+    """Create SHAP summary plot"""
     fig, ax = plt.subplots(figsize=(10, 8))
 
-    # 计算特征重要性（平均绝对SHAP值）
+    # Calculate feature importance (mean absolute SHAP value)
     importance = np.abs(shap_values).mean(axis=0)
     indices = np.argsort(importance)[::-1][:20]
 
@@ -401,16 +394,12 @@ def create_shap_summary_fig(shap_values, X, feature_names, title="SHAP Summary")
 
 
 def create_shap_force_fig(shap_values, base_value, feature_names, predicted_value, title=""):
-    """创建SHAP力场图"""
+    """Create SHAP force plot"""
     fig, ax = plt.subplots(figsize=(12, 3))
-
-    # 分离正负值
-    positive_mask = shap_values > 0
-    negative_mask = shap_values < 0
 
     indices = np.argsort(np.abs(shap_values))[::-1][:10]
 
-    # 绘制条形
+    # Draw bars
     left_pos = base_value
     left_neg = base_value
 
@@ -437,7 +426,7 @@ def create_shap_force_fig(shap_values, base_value, feature_names, predicted_valu
 
 def get_shap_explanation(source_title, target_title, movies, similarity_matrix,
                           explainer, model, feature_matrix, pair_names):
-    """获取SHAP解释"""
+    """Get SHAP explanation"""
     if explainer is None:
         return None
 
@@ -448,11 +437,11 @@ def get_shap_explanation(source_title, target_title, movies, similarity_matrix,
     if source_idx is None or target_idx is None:
         return None
 
-    # 创建特征
+    # Create features
     f1, f2 = feature_matrix[source_idx], feature_matrix[target_idx]
     X = np.concatenate([np.abs(f1-f2), f1*f2]).reshape(1, -1)
 
-    # 计算SHAP值
+    # Calculate SHAP values
     shap_values = explainer.shap_values(X)[0]
     base_value = explainer.expected_value
     if isinstance(base_value, np.ndarray):
@@ -461,7 +450,7 @@ def get_shap_explanation(source_title, target_title, movies, similarity_matrix,
     predicted = model.predict(X)[0]
     actual = similarity_matrix[source_idx, target_idx]
 
-    # 分析贡献
+    # Analyze contributions
     shap_df = pd.DataFrame({
         'feature': pair_names,
         'shap_value': shap_values
@@ -483,32 +472,17 @@ def get_shap_explanation(source_title, target_title, movies, similarity_matrix,
     }
 
 
-# ==================== 可解释性函数 ====================
+# ==================== Explainability Functions ====================
 
 def get_explanation(source_movie, target_movie, movies):
-    """
-    生成推荐解释
-
-    Parameters:
-    -----------
-    source_movie : str
-        源电影标题
-    target_movie : str
-        推荐电影标题
-    movies : DataFrame
-        电影数据
-
-    Returns:
-    --------
-    dict : 解释信息
-    """
+    """Generate recommendation explanation"""
     title_to_idx = pd.Series(movies.index, index=movies['title']).to_dict()
 
     source_idx = title_to_idx.get(source_movie)
     target_idx = title_to_idx.get(target_movie)
 
     if source_idx is None or target_idx is None:
-        return {'reasons': [], 'summary': '无法生成解释'}
+        return {'reasons': [], 'summary': 'Cannot generate explanation'}
 
     source = movies.iloc[source_idx]
     target = movies.iloc[target_idx]
@@ -516,40 +490,40 @@ def get_explanation(source_movie, target_movie, movies):
     reasons = []
     details = []
 
-    # 1. 检查导演
+    # 1. Check director
     if source['director'] and target['director'] and source['director'] == target['director']:
-        reasons.append(f"🎬 同一导演: {source['director']}")
-        details.append(('导演', source['director'], '高'))
+        reasons.append(f"🎬 Same Director: {source['director']}")
+        details.append(('Director', source['director'], 'High'))
 
-    # 2. 检查类型
+    # 2. Check genres
     source_genres = set(source.get('genres_list', []))
     target_genres = set(target.get('genres_list', []))
     common_genres = source_genres & target_genres
     if common_genres:
-        reasons.append(f"🎭 相同类型: {', '.join(common_genres)}")
-        details.append(('类型', list(common_genres), '高'))
+        reasons.append(f"🎭 Same Genres: {', '.join(common_genres)}")
+        details.append(('Genres', list(common_genres), 'High'))
 
-    # 3. 检查演员
+    # 3. Check cast
     source_cast = set(source.get('cast_list', []))
     target_cast = set(target.get('cast_list', []))
     common_cast = source_cast & target_cast
     if common_cast:
-        reasons.append(f"👥 共同演员: {', '.join(list(common_cast)[:2])}")
-        details.append(('演员', list(common_cast), '中'))
+        reasons.append(f"👥 Common Cast: {', '.join(list(common_cast)[:2])}")
+        details.append(('Cast', list(common_cast), 'Medium'))
 
-    # 4. 检查关键词
+    # 4. Check keywords
     source_keywords = set(source.get('keywords_list', []))
     target_keywords = set(target.get('keywords_list', []))
     common_keywords = source_keywords & target_keywords
     if common_keywords:
-        reasons.append(f"🏷️ 相似主题: {', '.join(list(common_keywords)[:2])}")
-        details.append(('关键词', list(common_keywords), '标准'))
+        reasons.append(f"🏷️ Similar Themes: {', '.join(list(common_keywords)[:2])}")
+        details.append(('Keywords', list(common_keywords), 'Standard'))
 
-    # 生成总结
+    # Generate summary
     if reasons:
         summary = reasons[0].split(': ')[1] if ': ' in reasons[0] else reasons[0]
     else:
-        summary = "综合特征相似"
+        summary = "Overall feature similarity"
 
     return {
         'reasons': reasons,
@@ -558,30 +532,30 @@ def get_explanation(source_movie, target_movie, movies):
     }
 
 
-# ==================== 显示函数 ====================
+# ==================== Display Functions ====================
 
 def display_movie_info(movie_row):
-    """显示电影详细信息"""
+    """Display movie details"""
     col1, col2 = st.columns([1, 2])
 
     with col1:
         st.markdown(f"### 🎬 {movie_row['title']}")
-        st.markdown(f"**评分:** ⭐ {movie_row['vote_average']}/10")
-        st.markdown(f"**年份:** {movie_row['release_date'][:4] if movie_row['release_date'] else 'N/A'}")
-        st.markdown(f"**时长:** {int(movie_row['runtime'])} 分钟")
+        st.markdown(f"**Rating:** ⭐ {movie_row['vote_average']}/10")
+        st.markdown(f"**Year:** {movie_row['release_date'][:4] if movie_row['release_date'] else 'N/A'}")
+        st.markdown(f"**Runtime:** {int(movie_row['runtime'])} min")
 
     with col2:
-        st.markdown(f"**类型:** {', '.join(movie_row['genres_list'])}")
-        st.markdown(f"**导演:** {movie_row['director']}")
-        st.markdown(f"**主演:** {', '.join(movie_row['cast_list'][:3])}")
+        st.markdown(f"**Genres:** {', '.join(movie_row['genres_list'])}")
+        st.markdown(f"**Director:** {movie_row['director']}")
+        st.markdown(f"**Cast:** {', '.join(movie_row['cast_list'][:3])}")
 
-    st.markdown(f"**简介:** {movie_row['overview'][:300]}..." if len(movie_row['overview']) > 300 else f"**简介:** {movie_row['overview']}")
+    st.markdown(f"**Overview:** {movie_row['overview'][:300]}..." if len(movie_row['overview']) > 300 else f"**Overview:** {movie_row['overview']}")
 
 
 def display_recommendations(recommendations, method_name, source_movie=None, movies=None, show_explanation=True):
-    """显示推荐结果（带可解释性）"""
+    """Display recommendations with explainability"""
     if recommendations is None or len(recommendations) == 0:
-        st.warning("未找到推荐结果")
+        st.warning("No recommendations found")
         return
 
     for idx, (_, row) in enumerate(recommendations.iterrows(), 1):
@@ -603,92 +577,92 @@ def display_recommendations(recommendations, method_name, source_movie=None, mov
 
             with col4:
                 score = row['similarity_score']
-                st.metric("相似度", f"{score:.1%}")
+                st.metric("Similarity", f"{score:.1%}")
 
-            # 显示推荐解释
+            # Show recommendation explanation
             if show_explanation and source_movie and movies is not None:
                 explanation = get_explanation(source_movie, row['title'], movies)
                 if explanation['reasons']:
-                    with st.expander("💡 为什么推荐这部电影？", expanded=False):
+                    with st.expander("💡 Why this recommendation?", expanded=False):
                         for reason in explanation['reasons']:
                             st.markdown(f"  {reason}")
                 else:
-                    st.caption("💡 综合特征相似")
+                    st.caption("💡 Overall feature similarity")
 
             st.divider()
 
 
-# ==================== 主应用 ====================
+# ==================== Main Application ====================
 
 def main():
-    # 标题
-    st.markdown('<div class="main-header">🎬 电影推荐系统</div>', unsafe_allow_html=True)
-    st.markdown('<p style="text-align: center; color: #666;">基于三种机器学习方法的智能推荐</p>', unsafe_allow_html=True)
+    # Title
+    st.markdown('<div class="main-header">🎬 Movie Recommender System</div>', unsafe_allow_html=True)
+    st.markdown('<p style="text-align: center; color: #666;">Intelligent recommendations using three ML methods</p>', unsafe_allow_html=True)
 
-    # 加载数据
-    with st.spinner('正在加载数据...'):
+    # Load data
+    with st.spinner('Loading data...'):
         movies = load_and_preprocess_data()
 
-    # 构建相似度矩阵
-    with st.spinner('正在构建推荐模型...'):
+    # Build similarity matrices
+    with st.spinner('Building recommendation models...'):
         content_similarity = build_content_similarity(movies)
         metadata_similarity = build_metadata_similarity(movies)
         cf_similarity, user_movie_matrix = build_cf_similarity(movies)
 
-    # 侧边栏
+    # Sidebar
     with st.sidebar:
-        st.markdown("## ⚙️ 设置")
+        st.markdown("## ⚙️ Settings")
 
-        # 电影搜索
-        st.markdown("### 🔍 选择电影")
+        # Movie search
+        st.markdown("### 🔍 Select Movie")
 
-        # 搜索框
-        search_query = st.text_input("搜索电影", placeholder="输入电影名称...")
+        # Search box
+        search_query = st.text_input("Search movies", placeholder="Enter movie title...")
 
         if search_query:
             filtered_movies = movies[movies['title'].str.contains(search_query, case=False, na=False)]
             movie_options = filtered_movies['title'].tolist()[:20]
         else:
-            # 默认显示热门电影
+            # Default: show popular movies
             movie_options = movies.nlargest(50, 'popularity')['title'].tolist()
 
         selected_movie = st.selectbox(
-            "选择一部电影",
+            "Select a movie",
             options=movie_options,
             index=0 if movie_options else None
         )
 
         st.markdown("---")
 
-        # 推荐数量
-        top_n = st.slider("推荐数量", min_value=5, max_value=20, value=10)
+        # Number of recommendations
+        top_n = st.slider("Number of recommendations", min_value=5, max_value=20, value=10)
 
         st.markdown("---")
 
-        # 混合推荐权重
-        st.markdown("### ⚖️ 混合推荐权重")
-        w1 = st.slider("内容相似度权重", 0.0, 1.0, 0.3, 0.1)
-        w2 = st.slider("元数据相似度权重", 0.0, 1.0, 0.4, 0.1)
-        w3 = st.slider("协同过滤权重", 0.0, 1.0, 0.3, 0.1)
+        # Hybrid weights
+        st.markdown("### ⚖️ Hybrid Weights")
+        w1 = st.slider("Content weight", 0.0, 1.0, 0.3, 0.1)
+        w2 = st.slider("Metadata weight", 0.0, 1.0, 0.4, 0.1)
+        w3 = st.slider("Collaborative filtering weight", 0.0, 1.0, 0.3, 0.1)
 
-        # 归一化权重
+        # Normalize weights
         total = w1 + w2 + w3
         if total > 0:
             weights = (w1/total, w2/total, w3/total)
         else:
             weights = (0.33, 0.34, 0.33)
 
-        st.caption(f"归一化: {weights[0]:.2f}, {weights[1]:.2f}, {weights[2]:.2f}")
+        st.caption(f"Normalized: {weights[0]:.2f}, {weights[1]:.2f}, {weights[2]:.2f}")
 
         st.markdown("---")
-        st.markdown("### 📊 数据统计")
-        st.metric("电影总数", f"{len(movies):,}")
-        st.metric("模拟用户数", "500")
+        st.markdown("### 📊 Data Statistics")
+        st.metric("Total Movies", f"{len(movies):,}")
+        st.metric("Simulated Users", "500")
 
-    # 主内容区
+    # Main content area
     if selected_movie:
-        # 显示选中的电影信息
-        st.markdown("## 📽️ 选中的电影")
+        # Display selected movie info
+        st.markdown("## 📽️ Selected Movie")
         movie_idx = movies[movies['title'] == selected_movie].index[0]
         movie_info = movies.iloc[movie_idx]
 
@@ -697,51 +671,51 @@ def main():
 
         st.markdown("---")
 
-        # 推荐结果标签页
-        st.markdown("## 🎯 推荐结果")
+        # Recommendation tabs
+        st.markdown("## 🎯 Recommendations")
 
         tab1, tab2, tab3, tab4, tab5 = st.tabs([
-            "📝 基于内容",
-            "🏷️ 基于元数据",
-            "👥 协同过滤",
-            "🔀 混合推荐",
-            "🔬 SHAP解释"
+            "📝 Content-Based",
+            "🏷️ Metadata-Based",
+            "👥 Collaborative Filtering",
+            "🔀 Hybrid",
+            "🔬 SHAP Explanation"
         ])
 
         with tab1:
             st.markdown("""
             <div class="method-header">
-            <b>方法说明:</b> 使用TF-IDF分析电影简介文本，通过余弦相似度找到内容相似的电影
+            <b>Method:</b> Uses TF-IDF to analyze movie descriptions and finds similar content using cosine similarity
             </div>
             """, unsafe_allow_html=True)
 
             content_recs = get_recommendations(selected_movie, movies, content_similarity, top_n)
-            display_recommendations(content_recs, "基于内容", selected_movie, movies)
+            display_recommendations(content_recs, "Content-Based", selected_movie, movies)
 
         with tab2:
             st.markdown("""
             <div class="method-header">
-            <b>方法说明:</b> 综合分析电影类型、导演、演员、关键词等元数据进行推荐
+            <b>Method:</b> Analyzes genres, directors, cast, and keywords to find similar movies
             </div>
             """, unsafe_allow_html=True)
 
             metadata_recs = get_recommendations(selected_movie, movies, metadata_similarity, top_n)
-            display_recommendations(metadata_recs, "基于元数据", selected_movie, movies)
+            display_recommendations(metadata_recs, "Metadata-Based", selected_movie, movies)
 
         with tab3:
             st.markdown("""
             <div class="method-header">
-            <b>方法说明:</b> 基于模拟用户行为数据，使用协同过滤算法找到用户可能喜欢的电影
+            <b>Method:</b> Uses simulated user behavior data with collaborative filtering algorithms
             </div>
             """, unsafe_allow_html=True)
 
             cf_recs = get_recommendations(selected_movie, movies, cf_similarity, top_n)
-            display_recommendations(cf_recs, "协同过滤", selected_movie, movies)
+            display_recommendations(cf_recs, "Collaborative Filtering", selected_movie, movies)
 
         with tab4:
             st.markdown(f"""
             <div class="method-header">
-            <b>方法说明:</b> 综合三种方法的加权结果 (内容:{weights[0]:.0%}, 元数据:{weights[1]:.0%}, 协同过滤:{weights[2]:.0%})
+            <b>Method:</b> Weighted combination of all methods (Content:{weights[0]:.0%}, Metadata:{weights[1]:.0%}, CF:{weights[2]:.0%})
             </div>
             """, unsafe_allow_html=True)
 
@@ -750,86 +724,86 @@ def main():
                 content_similarity, metadata_similarity, cf_similarity,
                 weights, top_n
             )
-            display_recommendations(hybrid_recs, "混合推荐", selected_movie, movies)
+            display_recommendations(hybrid_recs, "Hybrid", selected_movie, movies)
 
         with tab5:
             st.markdown("""
             <div class="method-header">
-            <b>SHAP可解释性分析:</b> 使用SHAP (SHapley Additive exPlanations) 解释推荐原因，
-            基于博弈论的Shapley值公平分配每个特征的贡献
+            <b>SHAP Explainability:</b> Uses SHAP (SHapley Additive exPlanations) to explain recommendations
+            based on game theory's Shapley values for fair feature contribution allocation
             </div>
             """, unsafe_allow_html=True)
 
             if not SHAP_AVAILABLE:
-                st.error("SHAP库未安装，请运行: pip install shap")
+                st.error("SHAP library not installed. Please run: pip install shap")
             else:
-                # 构建SHAP解释器
-                with st.spinner("正在构建SHAP解释器..."):
+                # Build SHAP explainer
+                with st.spinner("Building SHAP explainer..."):
                     shap_explainer, shap_model, feature_matrix, pair_names = build_shap_explainer(
                         movies, metadata_similarity
                     )
 
                 if shap_explainer is not None:
-                    # 选择要解释的推荐电影
-                    st.markdown("### 选择要解释的推荐")
+                    # Select movie to explain
+                    st.markdown("### Select Recommendation to Explain")
 
                     if metadata_recs is not None and len(metadata_recs) > 0:
                         target_options = metadata_recs['title'].tolist()[:10]
                         selected_target = st.selectbox(
-                            "选择一部推荐电影进行SHAP分析",
+                            "Select a recommended movie for SHAP analysis",
                             options=target_options,
                             key="shap_target"
                         )
 
                         if selected_target:
-                            # 获取SHAP解释
+                            # Get SHAP explanation
                             shap_result = get_shap_explanation(
                                 selected_movie, selected_target, movies, metadata_similarity,
                                 shap_explainer, shap_model, feature_matrix, pair_names
                             )
 
                             if shap_result:
-                                # 显示基本信息
-                                st.markdown("### 📊 相似度分析")
+                                # Display basic info
+                                st.markdown("### 📊 Similarity Analysis")
                                 col1, col2, col3 = st.columns(3)
                                 with col1:
-                                    st.metric("实际相似度", f"{shap_result['actual']:.2%}")
+                                    st.metric("Actual Similarity", f"{shap_result['actual']:.2%}")
                                 with col2:
-                                    st.metric("模型预测", f"{shap_result['predicted']:.2%}")
+                                    st.metric("Model Prediction", f"{shap_result['predicted']:.2%}")
                                 with col3:
-                                    st.metric("基准值", f"{shap_result['base_value']:.4f}")
+                                    st.metric("Base Value", f"{shap_result['base_value']:.4f}")
 
-                                # 显示正负贡献
-                                st.markdown("### 🔍 特征贡献分析")
+                                # Display contributions
+                                st.markdown("### 🔍 Feature Contribution Analysis")
                                 col1, col2 = st.columns(2)
 
                                 with col1:
-                                    st.markdown("**✅ 正向贡献 (增加相似度)**")
+                                    st.markdown("**✅ Positive Contributions (Increases Similarity)**")
                                     if len(shap_result['positive']) > 0:
                                         for _, row in shap_result['positive'].iterrows():
                                             st.success(f"{row['feature']}: +{row['shap_value']:.4f}")
                                     else:
-                                        st.info("无显著正向贡献")
+                                        st.info("No significant positive contributions")
 
                                 with col2:
-                                    st.markdown("**❌ 负向贡献 (降低相似度)**")
+                                    st.markdown("**❌ Negative Contributions (Decreases Similarity)**")
                                     if len(shap_result['negative']) > 0:
                                         for _, row in shap_result['negative'].iterrows():
                                             st.error(f"{row['feature']}: {row['shap_value']:.4f}")
                                     else:
-                                        st.info("无显著负向贡献")
+                                        st.info("No significant negative contributions")
 
-                                # SHAP可视化
-                                st.markdown("### 📈 SHAP可视化")
+                                # SHAP visualizations
+                                st.markdown("### 📈 SHAP Visualizations")
 
                                 viz_tab1, viz_tab2, viz_tab3 = st.tabs([
-                                    "瀑布图 (Waterfall)",
-                                    "力场图 (Force)",
-                                    "特征重要性 (Summary)"
+                                    "Waterfall Plot",
+                                    "Force Plot",
+                                    "Feature Importance"
                                 ])
 
                                 with viz_tab1:
-                                    st.markdown("**瀑布图**: 展示每个特征如何从基准值推动预测结果")
+                                    st.markdown("**Waterfall Plot**: Shows how each feature pushes the prediction from base value")
                                     fig_waterfall = create_shap_waterfall_fig(
                                         shap_result['shap_values'],
                                         shap_result['base_value'],
@@ -840,7 +814,7 @@ def main():
                                     plt.close(fig_waterfall)
 
                                 with viz_tab2:
-                                    st.markdown("**力场图**: 展示正负贡献的拉锯效果")
+                                    st.markdown("**Force Plot**: Shows the tug-of-war between positive and negative contributions")
                                     fig_force = create_shap_force_fig(
                                         shap_result['shap_values'],
                                         shap_result['base_value'],
@@ -852,10 +826,9 @@ def main():
                                     plt.close(fig_force)
 
                                 with viz_tab3:
-                                    st.markdown("**全局特征重要性**: 计算所有样本的平均SHAP贡献")
-                                    # 计算多个样本的SHAP值
-                                    with st.spinner("计算全局特征重要性..."):
-                                        # 采样计算
+                                    st.markdown("**Global Feature Importance**: Mean SHAP contribution across all samples")
+                                    with st.spinner("Calculating global feature importance..."):
+                                        # Sample calculation
                                         n_samples = min(200, len(movies))
                                         sample_indices = np.random.choice(len(movies), n_samples, replace=False)
                                         source_idx = movies[movies['title'] == selected_movie].index[0]
@@ -880,59 +853,59 @@ def main():
                                             st.pyplot(fig_summary)
                                             plt.close(fig_summary)
 
-                                # 解释说明
-                                with st.expander("💡 如何解读SHAP图?"):
+                                # Explanation guide
+                                with st.expander("💡 How to interpret SHAP plots?"):
                                     st.markdown("""
-                                    **SHAP值解读:**
-                                    - **正值 (红色)**: 该特征增加了两部电影的相似度
-                                    - **负值 (蓝色)**: 该特征降低了两部电影的相似度
-                                    - **绝对值大小**: 表示该特征影响的强度
+                                    **SHAP Value Interpretation:**
+                                    - **Positive values (Red)**: Feature increases movie similarity
+                                    - **Negative values (Blue)**: Feature decreases movie similarity
+                                    - **Absolute magnitude**: Indicates strength of the feature's impact
 
-                                    **特征含义:**
-                                    - `XXX_差异`: 两部电影在该特征上的差异程度
-                                    - `XXX_匹配`: 两部电影在该特征上的匹配程度（同时拥有）
+                                    **Feature Naming Convention:**
+                                    - `XXX_Diff`: Difference between two movies on that feature
+                                    - `XXX_Match`: Match degree (both movies have the feature)
 
-                                    **示例:**
-                                    - `类型_Action_匹配` 值为正 → 两部电影都是动作片，增加相似度
-                                    - `评分_差异` 值为负 → 两部电影评分差异大，降低相似度
+                                    **Examples:**
+                                    - `Genre_Action_Match` is positive → Both are action movies, increases similarity
+                                    - `Rating_Diff` is negative → Large rating difference, decreases similarity
                                     """)
                             else:
-                                st.warning("无法生成SHAP解释")
+                                st.warning("Cannot generate SHAP explanation")
                     else:
-                        st.info("请先获取推荐结果")
+                        st.info("Please get recommendations first")
                 else:
-                    st.error("SHAP解释器初始化失败")
+                    st.error("SHAP explainer initialization failed")
 
-        # 三种方法对比
+        # Method comparison
         st.markdown("---")
-        st.markdown("## 📊 三种方法对比")
+        st.markdown("## 📊 Method Comparison")
 
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            st.markdown("### 📝 基于内容 Top 5")
+            st.markdown("### 📝 Content-Based Top 5")
             if content_recs is not None:
                 for _, row in content_recs.head(5).iterrows():
                     st.markdown(f"- **{row['title']}** ({row['similarity_score']:.1%})")
 
         with col2:
-            st.markdown("### 🏷️ 基于元数据 Top 5")
+            st.markdown("### 🏷️ Metadata-Based Top 5")
             if metadata_recs is not None:
                 for _, row in metadata_recs.head(5).iterrows():
                     st.markdown(f"- **{row['title']}** ({row['similarity_score']:.1%})")
 
         with col3:
-            st.markdown("### 👥 协同过滤 Top 5")
+            st.markdown("### 👥 Collaborative Filtering Top 5")
             if cf_recs is not None:
                 for _, row in cf_recs.head(5).iterrows():
                     st.markdown(f"- **{row['title']}** ({row['similarity_score']:.1%})")
 
-    # 页脚
+    # Footer
     st.markdown("---")
     st.markdown("""
     <div style="text-align: center; color: #888; padding: 1rem;">
-        <p>🎬 电影推荐系统 Demo | 基于 TMDB 5000 数据集</p>
-        <p>三种推荐方法: 基于内容 (TF-IDF) | 基于元数据 | 协同过滤</p>
+        <p>🎬 Movie Recommender Demo | TMDB 5000 Dataset</p>
+        <p>Three recommendation methods: Content-Based (TF-IDF) | Metadata-Based | Collaborative Filtering</p>
     </div>
     """, unsafe_allow_html=True)
 
