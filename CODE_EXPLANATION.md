@@ -865,3 +865,224 @@ def hybrid_recommend(self, title, top_n=10, weights=(0.3, 0.4, 0.3)):
 - **基于元数据**: 同导演、同类型、同演员
 - **协同过滤**: 相似用户群体的偏好
 - **展示方式**: 多层次解释 + 可视化 + 贡献度分析
+
+---
+
+## 7. SHAP可解释性框架
+
+### 7.1 什么是SHAP？
+
+**SHAP (SHapley Additive exPlanations)** 是基于博弈论的可解释性方法：
+
+```
+Shapley值的核心思想:
+- 将"预测结果"视为多个特征"合作"的产出
+- 公平地分配每个特征对最终预测的"贡献"
+- 基于所有可能的特征组合来计算边际贡献
+```
+
+**SHAP值的性质：**
+1. **局部精确性**: 所有特征的SHAP值之和 = 预测值 - 基准值
+2. **一致性**: 如果特征A的贡献始终≥特征B，则SHAP(A) ≥ SHAP(B)
+3. **可加性**: 模型预测 = 基准值 + Σ(SHAP值)
+
+### 7.2 SHAP在推荐系统中的应用
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    SHAP可解释性流程                              │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  电影A ──────┐                                                  │
+│              │                                                  │
+│              ├──► 特征差异/匹配 ──► 替代模型 ──► SHAP解释       │
+│              │    (类型、导演、    (梯度提升)   (特征贡献)       │
+│  电影B ──────┘     演员、关键词)                                │
+│                                                                 │
+│  输出示例:                                                      │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ 为什么推荐《Titanic》给喜欢《Avatar》的用户?             │   │
+│  │                                                         │   │
+│  │ 正向因素:                                               │   │
+│  │  +0.25  同一导演 (James Cameron)                        │   │
+│  │  +0.08  热度水平相近                                    │   │
+│  │                                                         │   │
+│  │ 负向因素:                                               │   │
+│  │  -0.05  类型不完全匹配 (Sci-Fi vs Drama)                │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 7.3 实现架构
+
+```python
+# shap_explainability.py 核心类
+
+class SHAPRecommenderExplainer:
+    """
+    使用替代模型 + SHAP 解释推荐
+    """
+
+    def __init__(self, movies_df, similarity_matrix):
+        # 1. 准备电影特征矩阵
+        # 2. 训练替代模型模拟相似度计算
+        # 3. 使用SHAP解释替代模型
+
+    def _prepare_features(self):
+        """
+        将电影元数据转换为数值特征:
+        - 类型: MultiLabelBinarizer (one-hot)
+        - 导演: LabelEncoder
+        - 数值特征: vote_average, popularity
+        - 计数特征: cast_count, keyword_count
+        """
+
+    def train_explainer_model(self):
+        """
+        训练梯度提升回归模型:
+        输入: 电影对的特征差异和匹配度
+        输出: 相似度分数
+        """
+        # 采样电影对
+        # 计算特征差异 |f1 - f2| 和特征乘积 f1 * f2
+        # 训练 GradientBoostingRegressor
+        # 创建 SHAP TreeExplainer
+
+    def explain_pair(self, source_title, target_title):
+        """
+        解释两部电影的相似度
+        返回: SHAP值分解
+        """
+
+
+class FeatureContributionAnalyzer:
+    """
+    不依赖SHAP的简化版特征贡献分析
+    直接计算各特征的匹配度和贡献
+    """
+```
+
+### 7.4 使用示例
+
+```python
+from movie_recommender import MovieRecommenderSystem
+from shap_explainability import SHAPRecommenderExplainer, FeatureContributionAnalyzer
+
+# 初始化
+recommender = MovieRecommenderSystem('tmdb_5000_movies.csv', 'tmdb_5000_credits.csv')
+recommender.build_metadata_based_model()
+
+# 方法1: SHAP解释器
+shap_explainer = SHAPRecommenderExplainer(
+    recommender.movies,
+    recommender.metadata_similarity,
+    'metadata'
+)
+shap_explainer.train_explainer_model()
+
+# 生成SHAP解释报告
+report = shap_explainer.generate_explanation_report('Avatar', 'Titanic')
+print(report)
+
+# 绘制SHAP特征重要性图
+shap_explainer.plot_feature_importance()
+
+# 方法2: 特征贡献分析（无需SHAP依赖）
+analyzer = FeatureContributionAnalyzer(recommender.movies)
+report = analyzer.generate_contribution_report('Avatar', 'Titanic')
+print(report)
+
+# 绘制贡献图
+analyzer.plot_contribution('Avatar', 'Titanic')
+```
+
+### 7.5 SHAP解释报告示例
+
+```
+======================================================================
+SHAP 可解释性分析报告
+======================================================================
+
+源电影: 《Avatar》
+推荐电影: 《Titanic》
+
+【相似度分析】
+  实际相似度: 72.3%
+  模型预测相似度: 71.8%
+  SHAP基准值: 0.1523
+
+【正向影响因素】(提高相似度)
+  同一导演的作品 (+0.2534)
+  热度水平相近 (+0.0821)
+  评分水平相近 (+0.0456)
+
+【负向影响因素】(降低相似度)
+  类型 Drama 不匹配 (-0.0523)
+  类型 Science Fiction 差异大 (-0.0312)
+
+【解释说明】
+  SHAP值表示每个特征对相似度预测的贡献
+  正值表示该特征增加相似度，负值表示降低相似度
+======================================================================
+```
+
+### 7.6 特征贡献可视化
+
+```
+【贡献可视化】
+  类型   [████████░░░░░░░░░░░░] 40.2%
+  导演   [████████████████░░░░] 82.3%
+  演员   [░░░░░░░░░░░░░░░░░░░░] 0.0%
+  关键词 [██░░░░░░░░░░░░░░░░░░] 12.5%
+```
+
+### 7.7 SHAP vs 传统解释方法对比
+
+| 特性 | 传统方法 | SHAP方法 |
+|------|----------|----------|
+| 数学基础 | 启发式规则 | 博弈论Shapley值 |
+| 公平性 | 依赖设计 | 数学保证公平 |
+| 一致性 | 不保证 | 保证一致 |
+| 可加性 | 不保证 | 保证可加 |
+| 计算复杂度 | O(n) | O(2^n) → 近似 |
+| 可视化 | 需自定义 | 内置丰富图表 |
+| 全局/局部 | 通常局部 | 两者兼顾 |
+
+### 7.8 核心代码解析
+
+```python
+def explain_pair(self, source_title, target_title):
+    """解释两部电影的相似度"""
+
+    # Step 1: 获取两部电影的特征向量
+    f1 = self.feature_matrix[source_idx]  # 例: [1,0,1,0,5.2,...]
+    f2 = self.feature_matrix[target_idx]  # 例: [1,1,0,0,4.8,...]
+
+    # Step 2: 计算特征关系
+    feature_diff = np.abs(f1 - f2)   # 差异: [0,1,1,0,0.4,...]
+    feature_prod = f1 * f2            # 匹配: [1,0,0,0,24.96,...]
+
+    # Step 3: 组合为输入
+    X = np.hstack([feature_diff, feature_prod])
+
+    # Step 4: 计算SHAP值
+    shap_values = self.explainer.shap_values(X)
+
+    # Step 5: 解释结果
+    # shap_values[i] > 0: 第i个特征正向影响相似度
+    # shap_values[i] < 0: 第i个特征负向影响相似度
+    # sum(shap_values) + base_value ≈ predicted_similarity
+```
+
+### 7.9 安装与依赖
+
+```bash
+# 安装SHAP
+pip install shap>=0.42.0
+
+# 验证安装
+python -c "import shap; print(f'SHAP版本: {shap.__version__}')"
+```
+
+**注意**: 如果SHAP安装失败，可以使用 `FeatureContributionAnalyzer` 作为替代，它不依赖SHAP包但提供类似的特征贡献分析功能。

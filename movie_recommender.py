@@ -62,6 +62,11 @@ class MovieRecommenderSystem:
         self.content_similarity = None
         self.metadata_similarity = None
 
+        # 保存向量化器和矩阵（用于可解释性）
+        self.tfidf_vectorizer = None
+        self.tfidf_matrix = None
+        self.explainer = None
+
         # 协同过滤相关
         self.user_movie_matrix = None
         self.item_similarity_cf = None
@@ -160,20 +165,20 @@ class MovieRecommenderSystem:
         print("=" * 60)
 
         # TF-IDF向量化
-        tfidf = TfidfVectorizer(
+        self.tfidf_vectorizer = TfidfVectorizer(
             stop_words='english',
             max_features=5000,
             ngram_range=(1, 2)
         )
 
         # 对电影简介进行向量化
-        tfidf_matrix = tfidf.fit_transform(self.movies['overview'])
+        self.tfidf_matrix = self.tfidf_vectorizer.fit_transform(self.movies['overview'])
 
-        print(f"TF-IDF矩阵形状: {tfidf_matrix.shape}")
-        print(f"特征数量: {len(tfidf.get_feature_names_out())}")
+        print(f"TF-IDF矩阵形状: {self.tfidf_matrix.shape}")
+        print(f"特征数量: {len(self.tfidf_vectorizer.get_feature_names_out())}")
 
         # 计算余弦相似度
-        self.content_similarity = linear_kernel(tfidf_matrix, tfidf_matrix)
+        self.content_similarity = linear_kernel(self.tfidf_matrix, self.tfidf_matrix)
 
         print("基于内容的推荐模型构建完成！")
 
@@ -892,6 +897,286 @@ class MovieRecommenderSystem:
         """搜索电影"""
         matches = self.movies[self.movies['title'].str.contains(query, case=False, na=False)]
         return matches[['title', 'genres_list', 'vote_average', 'release_date']].head(10)
+
+    # =============================================
+    # 可解释性功能 (Explainability)
+    # =============================================
+
+    def _init_explainer(self):
+        """初始化解释器"""
+        from explainability import RecommendationExplainer
+        self.explainer = RecommendationExplainer(
+            self.movies,
+            self.tfidf_vectorizer,
+            self.tfidf_matrix
+        )
+
+    def explain_recommendation(self, source_title, target_title, method='metadata'):
+        """
+        解释为什么推荐某部电影
+
+        Parameters:
+        -----------
+        source_title : str
+            源电影（用户喜欢的电影）
+        target_title : str
+            推荐的电影
+        method : str
+            'content' - 基于内容的解释
+            'metadata' - 基于元数据的解释
+            'cf' - 协同过滤的解释
+            'hybrid' - 混合推荐的解释
+
+        Returns:
+        --------
+        dict : 解释信息
+        """
+        if self.explainer is None:
+            self._init_explainer()
+
+        if method == 'content':
+            return self.explainer.explain_content_based(source_title, target_title)
+        elif method == 'metadata':
+            return self.explainer.explain_metadata_based(source_title, target_title)
+        elif method == 'cf':
+            return self.explainer.explain_collaborative_filtering(
+                source_title, target_title,
+                user_movie_matrix=self.user_movie_matrix
+            )
+        elif method == 'hybrid':
+            source_idx = self.title_to_idx.get(source_title)
+            target_idx = self.title_to_idx.get(target_title)
+            if source_idx is not None and target_idx is not None:
+                content_score = self.content_similarity[source_idx, target_idx] if self.content_similarity is not None else None
+                metadata_score = self.metadata_similarity[source_idx, target_idx] if self.metadata_similarity is not None else None
+                cf_score = self.item_similarity_cf[source_idx, target_idx] if self.item_similarity_cf is not None else None
+                return self.explainer.explain_hybrid(
+                    source_title, target_title,
+                    content_score, metadata_score, cf_score
+                )
+        return None
+
+    def recommend_with_explanation(self, title, top_n=10, method='hybrid', weights=(0.3, 0.4, 0.3)):
+        """
+        生成带解释的推荐
+
+        Parameters:
+        -----------
+        title : str
+            电影标题
+        top_n : int
+            推荐数量
+        method : str
+            推荐方法 ('content', 'metadata', 'cf', 'hybrid')
+        weights : tuple
+            混合推荐权重
+
+        Returns:
+        --------
+        list : 包含推荐和解释的列表
+        """
+        if self.explainer is None:
+            self._init_explainer()
+
+        # 确保模型已构建
+        if self.content_similarity is None:
+            self.build_content_based_model()
+        if self.metadata_similarity is None:
+            self.build_metadata_based_model()
+        if self.item_similarity_cf is None:
+            self.build_collaborative_filtering_model()
+
+        # 获取推荐结果
+        if method == 'content':
+            recommendations = self.content_based_recommend(title, top_n)
+        elif method == 'metadata':
+            recommendations = self.metadata_based_recommend(title, top_n)
+        elif method == 'cf':
+            recommendations = self.collaborative_filtering_recommend(title, top_n)
+        else:  # hybrid
+            recommendations = self.hybrid_recommend(title, top_n, weights)
+
+        if recommendations is None:
+            return None
+
+        # 为每个推荐生成解释
+        results = []
+        for _, row in recommendations.iterrows():
+            target_title = row['title']
+
+            # 获取元数据解释（最易理解）
+            explanation = self.explainer.explain_metadata_based(title, target_title)
+
+            # 获取各方法分数
+            source_idx = self.title_to_idx[title]
+            target_idx = self.title_to_idx[target_title]
+
+            scores = {
+                'content': round(self.content_similarity[source_idx, target_idx], 3),
+                'metadata': round(self.metadata_similarity[source_idx, target_idx], 3),
+                'cf': round(self.item_similarity_cf[source_idx, target_idx], 3)
+            }
+
+            result = {
+                'rank': len(results) + 1,
+                'title': target_title,
+                'genres': row.get('genres_list', []),
+                'vote_average': row.get('vote_average', 0),
+                'similarity_score': row.get('similarity_score', row.get('hybrid_score', 0)),
+                'explanation': explanation,
+                'method_scores': scores,
+                'why_recommended': self._generate_simple_explanation(explanation)
+            }
+            results.append(result)
+
+        return results
+
+    def _generate_simple_explanation(self, explanation):
+        """生成简单的一句话解释"""
+        reasons = explanation.get('reasons', [])
+        if reasons:
+            return reasons[0]
+        return "综合特征相似"
+
+    def print_explained_recommendations(self, title, top_n=5, method='hybrid'):
+        """
+        打印带解释的推荐结果
+
+        Parameters:
+        -----------
+        title : str
+            电影标题
+        top_n : int
+            推荐数量
+        method : str
+            推荐方法
+        """
+        results = self.recommend_with_explanation(title, top_n, method)
+
+        if results is None:
+            print(f"找不到电影: {title}")
+            return
+
+        print("\n" + "=" * 70)
+        print(f"为《{title}》生成的可解释推荐 (方法: {method})")
+        print("=" * 70)
+
+        for result in results:
+            print(f"\n#{result['rank']} 《{result['title']}》")
+            print(f"    评分: {result['vote_average']}/10")
+            print(f"    类型: {', '.join(result['genres'][:3])}")
+            print(f"    相似度: {result['similarity_score']:.1%}")
+            print(f"    ✨ 推荐理由: {result['why_recommended']}")
+
+            # 显示详细理由
+            if len(result['explanation']['reasons']) > 1:
+                print(f"    📋 详细原因:")
+                for reason in result['explanation']['reasons'][1:]:
+                    print(f"       - {reason}")
+
+            # 显示各方法分数
+            scores = result['method_scores']
+            print(f"    📊 方法分数: 内容={scores['content']:.1%}, 元数据={scores['metadata']:.1%}, CF={scores['cf']:.1%}")
+
+        print("\n" + "=" * 70)
+
+    def get_explanation_report(self, source_title, target_title):
+        """
+        获取详细的解释报告
+
+        Parameters:
+        -----------
+        source_title : str
+            源电影
+        target_title : str
+            目标电影
+
+        Returns:
+        --------
+        str : 格式化的解释报告
+        """
+        if self.explainer is None:
+            self._init_explainer()
+
+        # 确保模型已构建
+        if self.content_similarity is None:
+            self.build_content_based_model()
+        if self.metadata_similarity is None:
+            self.build_metadata_based_model()
+        if self.item_similarity_cf is None:
+            self.build_collaborative_filtering_model()
+
+        source_idx = self.title_to_idx.get(source_title)
+        target_idx = self.title_to_idx.get(target_title)
+
+        if source_idx is None or target_idx is None:
+            return "电影未找到"
+
+        report_lines = []
+        report_lines.append("=" * 70)
+        report_lines.append(f"推荐解释报告")
+        report_lines.append("=" * 70)
+        report_lines.append(f"\n源电影: 《{source_title}》")
+        report_lines.append(f"推荐电影: 《{target_title}》")
+
+        # 源电影信息
+        source_movie = self.movies.iloc[source_idx]
+        target_movie = self.movies.iloc[target_idx]
+
+        report_lines.append(f"\n【电影信息对比】")
+        report_lines.append(f"{'属性':<15} {'源电影':<25} {'推荐电影':<25}")
+        report_lines.append("-" * 65)
+        report_lines.append(f"{'类型':<15} {str(source_movie['genres_list'][:3]):<25} {str(target_movie['genres_list'][:3]):<25}")
+        report_lines.append(f"{'导演':<15} {str(source_movie['director'])[:23]:<25} {str(target_movie['director'])[:23]:<25}")
+        report_lines.append(f"{'评分':<15} {source_movie['vote_average']:<25} {target_movie['vote_average']:<25}")
+
+        # 各方法相似度
+        report_lines.append(f"\n【相似度分析】")
+        report_lines.append(f"  内容相似度 (TF-IDF): {self.content_similarity[source_idx, target_idx]:.1%}")
+        report_lines.append(f"  元数据相似度: {self.metadata_similarity[source_idx, target_idx]:.1%}")
+        report_lines.append(f"  协同过滤相似度: {self.item_similarity_cf[source_idx, target_idx]:.1%}")
+
+        # 元数据详细匹配
+        report_lines.append(f"\n【特征匹配详情】")
+
+        # 导演
+        if source_movie['director'] == target_movie['director'] and source_movie['director']:
+            report_lines.append(f"  ✓ 导演匹配: {source_movie['director']}")
+        else:
+            report_lines.append(f"  ✗ 导演不同")
+
+        # 类型
+        common_genres = set(source_movie['genres_list']) & set(target_movie['genres_list'])
+        if common_genres:
+            report_lines.append(f"  ✓ 共同类型: {', '.join(common_genres)}")
+        else:
+            report_lines.append(f"  ✗ 无共同类型")
+
+        # 演员
+        common_cast = set(source_movie['cast_list']) & set(target_movie['cast_list'])
+        if common_cast:
+            report_lines.append(f"  ✓ 共同演员: {', '.join(list(common_cast)[:3])}")
+        else:
+            report_lines.append(f"  ✗ 无共同演员")
+
+        # 关键词
+        common_keywords = set(source_movie['keywords_list']) & set(target_movie['keywords_list'])
+        if common_keywords:
+            report_lines.append(f"  ✓ 共同关键词: {', '.join(list(common_keywords)[:3])}")
+        else:
+            report_lines.append(f"  ✗ 无共同关键词")
+
+        # 综合结论
+        report_lines.append(f"\n【推荐结论】")
+        metadata_exp = self.explainer.explain_metadata_based(source_title, target_title)
+        if metadata_exp['reasons']:
+            report_lines.append(f"  主要推荐原因: {metadata_exp['reasons'][0]}")
+        else:
+            report_lines.append(f"  主要推荐原因: 综合特征相似")
+
+        report_lines.append("=" * 70)
+
+        return '\n'.join(report_lines)
 
 
 def main():

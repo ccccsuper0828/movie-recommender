@@ -274,6 +274,81 @@ def get_hybrid_recommendations(title, movies, content_sim, metadata_sim, cf_sim,
     return recommendations
 
 
+# ==================== 可解释性函数 ====================
+
+def get_explanation(source_movie, target_movie, movies):
+    """
+    生成推荐解释
+
+    Parameters:
+    -----------
+    source_movie : str
+        源电影标题
+    target_movie : str
+        推荐电影标题
+    movies : DataFrame
+        电影数据
+
+    Returns:
+    --------
+    dict : 解释信息
+    """
+    title_to_idx = pd.Series(movies.index, index=movies['title']).to_dict()
+
+    source_idx = title_to_idx.get(source_movie)
+    target_idx = title_to_idx.get(target_movie)
+
+    if source_idx is None or target_idx is None:
+        return {'reasons': [], 'summary': '无法生成解释'}
+
+    source = movies.iloc[source_idx]
+    target = movies.iloc[target_idx]
+
+    reasons = []
+    details = []
+
+    # 1. 检查导演
+    if source['director'] and target['director'] and source['director'] == target['director']:
+        reasons.append(f"🎬 同一导演: {source['director']}")
+        details.append(('导演', source['director'], '高'))
+
+    # 2. 检查类型
+    source_genres = set(source.get('genres_list', []))
+    target_genres = set(target.get('genres_list', []))
+    common_genres = source_genres & target_genres
+    if common_genres:
+        reasons.append(f"🎭 相同类型: {', '.join(common_genres)}")
+        details.append(('类型', list(common_genres), '高'))
+
+    # 3. 检查演员
+    source_cast = set(source.get('cast_list', []))
+    target_cast = set(target.get('cast_list', []))
+    common_cast = source_cast & target_cast
+    if common_cast:
+        reasons.append(f"👥 共同演员: {', '.join(list(common_cast)[:2])}")
+        details.append(('演员', list(common_cast), '中'))
+
+    # 4. 检查关键词
+    source_keywords = set(source.get('keywords_list', []))
+    target_keywords = set(target.get('keywords_list', []))
+    common_keywords = source_keywords & target_keywords
+    if common_keywords:
+        reasons.append(f"🏷️ 相似主题: {', '.join(list(common_keywords)[:2])}")
+        details.append(('关键词', list(common_keywords), '标准'))
+
+    # 生成总结
+    if reasons:
+        summary = reasons[0].split(': ')[1] if ': ' in reasons[0] else reasons[0]
+    else:
+        summary = "综合特征相似"
+
+    return {
+        'reasons': reasons,
+        'details': details,
+        'summary': summary
+    }
+
+
 # ==================== 显示函数 ====================
 
 def display_movie_info(movie_row):
@@ -294,8 +369,8 @@ def display_movie_info(movie_row):
     st.markdown(f"**简介:** {movie_row['overview'][:300]}..." if len(movie_row['overview']) > 300 else f"**简介:** {movie_row['overview']}")
 
 
-def display_recommendations(recommendations, method_name):
-    """显示推荐结果"""
+def display_recommendations(recommendations, method_name, source_movie=None, movies=None, show_explanation=True):
+    """显示推荐结果（带可解释性）"""
     if recommendations is None or len(recommendations) == 0:
         st.warning("未找到推荐结果")
         return
@@ -320,6 +395,16 @@ def display_recommendations(recommendations, method_name):
             with col4:
                 score = row['similarity_score']
                 st.metric("相似度", f"{score:.1%}")
+
+            # 显示推荐解释
+            if show_explanation and source_movie and movies is not None:
+                explanation = get_explanation(source_movie, row['title'], movies)
+                if explanation['reasons']:
+                    with st.expander("💡 为什么推荐这部电影？", expanded=False):
+                        for reason in explanation['reasons']:
+                            st.markdown(f"  {reason}")
+                else:
+                    st.caption("💡 综合特征相似")
 
             st.divider()
 
@@ -421,7 +506,7 @@ def main():
             """, unsafe_allow_html=True)
 
             content_recs = get_recommendations(selected_movie, movies, content_similarity, top_n)
-            display_recommendations(content_recs, "基于内容")
+            display_recommendations(content_recs, "基于内容", selected_movie, movies)
 
         with tab2:
             st.markdown("""
@@ -431,7 +516,7 @@ def main():
             """, unsafe_allow_html=True)
 
             metadata_recs = get_recommendations(selected_movie, movies, metadata_similarity, top_n)
-            display_recommendations(metadata_recs, "基于元数据")
+            display_recommendations(metadata_recs, "基于元数据", selected_movie, movies)
 
         with tab3:
             st.markdown("""
@@ -441,7 +526,7 @@ def main():
             """, unsafe_allow_html=True)
 
             cf_recs = get_recommendations(selected_movie, movies, cf_similarity, top_n)
-            display_recommendations(cf_recs, "协同过滤")
+            display_recommendations(cf_recs, "协同过滤", selected_movie, movies)
 
         with tab4:
             st.markdown(f"""
@@ -455,7 +540,7 @@ def main():
                 content_similarity, metadata_similarity, cf_similarity,
                 weights, top_n
             )
-            display_recommendations(hybrid_recs, "混合推荐")
+            display_recommendations(hybrid_recs, "混合推荐", selected_movie, movies)
 
         # 三种方法对比
         st.markdown("---")
