@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  # Streamlit Frontend (main UI)
+  frontend:
+    build: .
+    container_name: cinematch-frontend
+    command: >
+      streamlit run frontend/app.py
+      --server.port 8501
+      --server.address 0.0.0.0
+      --server.headless true
+      --server.fileWatcherType none
+    ports:
+      - "8501:8501"
+    environment:
+      - PYTHONPATH=/app
+      - ENVIRONMENT=production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # FastAPI Backend (REST API)
+  api:
+    build: .
+    container_name: cinematch-api
+    command: >
+      uvicorn api.main:app
+      --host 0.0.0.0
+      --port 8000
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/app
+      - ENVIRONMENT=production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s

@@ -25,5 +25,13 @@ venv/
 .DS_Store
 Thumbs.db
 
-# Large files (optional - remove if you want to include datasets)
-# *.csv
+# Cache / model artifacts
+catboost_info/
+data/cache/
+data/processed/
+*.pkl
+
+# Large CSV data (tracked via Git LFS or download separately)
+# Uncomment below to exclude data from repo:
+# data/raw/*.csv
+# data/raw/kaggle_bo/*.csv

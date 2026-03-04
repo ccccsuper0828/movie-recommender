@@ -1,116 +1,231 @@
-# Movie Recommender System
+# 🎬 CineMatch - Movie Recommendation System
 
-A movie recommendation system built with three different machine learning approaches.
+A professional, modular movie recommendation system featuring multiple ML algorithms, a REST API, and an interactive web interface.
 
-## Features
+![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)
+![Streamlit](https://img.shields.io/badge/Streamlit-1.28+-red.svg)
+![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-This project implements three recommendation algorithms:
+## ✨ Features
 
-1. **Content-Based Filtering** - Uses TF-IDF to analyze movie descriptions and cosine similarity to find similar movies
-2. **Metadata-Based Filtering** - Combines genres, directors, actors, and keywords with weighted features
-3. **Collaborative Filtering** - Implements User-Based CF, Item-Based CF, and SVD matrix factorization
+### Recommendation Algorithms
 
-Additionally, a **Hybrid Recommender** combines all three methods with adjustable weights.
+1. **Content-Based Filtering** - TF-IDF vectorization of movie descriptions with cosine similarity
+2. **Metadata-Based Filtering** - Weighted combination of genres, directors, cast, and keywords
+3. **Collaborative Filtering** - Item-based CF, User-based CF, and SVD matrix factorization
+4. **Hybrid Recommender** - Intelligent combination of all methods with customizable weights
 
-## Dataset
+### Explainability
 
-Uses the [TMDB 5000 Movie Dataset](https://www.kaggle.com/datasets/tmdb/tmdb-movie-metadata) containing:
-- 4,803 movies
-- Movie metadata (genres, keywords, cast, crew)
-- Movie descriptions and ratings
+- **Rule-Based Explanations** - Human-readable reasons for recommendations
+- **SHAP Integration** - Feature importance analysis for ML transparency
 
-## Installation
+### Technical Features
+
+- 🚀 **FastAPI REST API** - Production-ready backend with OpenAPI documentation
+- 🎨 **Modern Web UI** - Cinema-inspired Streamlit frontend
+- 📊 **Analytics Dashboard** - System metrics and performance tracking
+- 🧪 **Comprehensive Tests** - Unit and integration test suite
+- 🐳 **Docker Support** - Containerized deployment ready
+
+## 📊 Dataset
+
+Uses the [TMDB 5000 Movie Dataset](https://www.kaggle.com/datasets/tmdb/tmdb-movie-metadata):
+- ~4,800 movies with rich metadata
+- Genres, keywords, cast, and crew information
+- Plot descriptions and user ratings
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Python 3.9+
+- pip or conda
+
+### Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/ccccsuper0828/movie-recommender.git
-cd movie-recommender
+git clone https://github.com/your-username/cinematch.git
+cd cinematch
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
+
+# Download data files to data/raw/
+# - tmdb_5000_movies.csv
+# - tmdb_5000_credits.csv
 ```
 
-## Dependencies
-
-- pandas
-- numpy
-- scikit-learn
-- scipy
-- streamlit
-- matplotlib
-- seaborn
-
-## Usage
-
-### Run the Streamlit Web Demo
+### Run the Application
 
 ```bash
-streamlit run app.py
+# Start the Streamlit frontend
+streamlit run frontend/app.py
+
+# Start the FastAPI backend (in another terminal)
+uvicorn api.main:app --reload
 ```
 
-Then open http://localhost:8501 in your browser.
+Access:
+- **Frontend**: http://localhost:8501
+- **API Docs**: http://localhost:8000/docs
 
-### Use as Python Module
+### Docker Deployment
+
+```bash
+# Build and run all services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+```
+
+## 📁 Project Structure
+
+```
+MOVIE/
+├── config/                 # Configuration management
+│   ├── settings.py         # Environment-based settings
+│   └── logging_config.py   # Logging configuration
+│
+├── src/                    # Core source code
+│   ├── core/               # Recommendation algorithms
+│   │   ├── base_recommender.py
+│   │   ├── content_based.py
+│   │   ├── metadata_based.py
+│   │   ├── collaborative.py
+│   │   └── hybrid.py
+│   ├── data/               # Data loading and preprocessing
+│   ├── explainability/     # Explanation generation
+│   ├── models/             # Data models and schemas
+│   ├── services/           # Business logic layer
+│   └── utils/              # Utility functions
+│
+├── api/                    # FastAPI REST API
+│   ├── main.py
+│   ├── dependencies.py
+│   └── routes/
+│
+├── frontend/               # Streamlit web interface
+│   ├── app.py
+│   ├── components/
+│   └── styles/
+│
+├── analytics/              # Analytics and metrics
+├── tests/                  # Test suite
+├── docs/                   # Documentation
+└── data/                   # Data files
+```
+
+## 💻 Usage
+
+### Python API
 
 ```python
-from movie_recommender import MovieRecommenderSystem
+from src.core import HybridRecommender
+from src.data import DataLoader, DataPreprocessor
 
-# Initialize
-recommender = MovieRecommenderSystem(
-    'tmdb_5000_movies.csv',
-    'tmdb_5000_credits.csv'
-)
+# Load and preprocess data
+loader = DataLoader()
+merged_df = loader.get_merged_data()
+preprocessor = DataPreprocessor(merged_df)
+movies_df = preprocessor.preprocess()
 
-# Build models
-recommender.build_content_based_model()
-recommender.build_metadata_based_model()
-recommender.build_collaborative_filtering_model()
+# Initialize recommender
+recommender = HybridRecommender()
+recommender.fit(movies_df)
 
 # Get recommendations
-recommender.content_based_recommend('Avatar', top_n=10)
-recommender.metadata_based_recommend('Avatar', top_n=10)
-recommender.collaborative_filtering_recommend('Avatar', method='item_based')
-recommender.collaborative_filtering_recommend('Avatar', method='svd')
+recommendations = recommender.recommend("The Matrix", n_recommendations=10)
+print(recommendations[['title', 'hybrid_score']])
 
-# Hybrid recommendation
-recommender.hybrid_recommend('Avatar', weights=(0.3, 0.4, 0.3))
-
-# Compare all methods
-recommender.compare_recommendations('Avatar', top_n=5)
-
-# Recommend for a user
-recommender.recommend_for_user(user_id=0, top_n=10)
+# Adjust method weights
+recommender.set_weights(
+    content_weight=0.4,
+    metadata_weight=0.3,
+    cf_weight=0.3
+)
 ```
 
-### Jupyter Notebook
+### REST API
 
 ```bash
-jupyter notebook movie_recommender_notebook.ipynb
+# Get recommendations
+curl "http://localhost:8000/api/v1/recommendations/The%20Matrix?top_n=5&method=hybrid"
+
+# Search/list movies
+curl "http://localhost:8000/api/v1/movies/?query=inception&page=1&page_size=10"
+
+# Get movie details by title
+curl "http://localhost:8000/api/v1/movies/The%20Matrix"
 ```
 
-## Project Structure
+### Using Services
 
+```python
+from src.services import RecommendationService, SearchService
+
+# Initialize services
+rec_service = RecommendationService(movies_df)
+search_service = SearchService(movies_df)
+
+# Search and recommend
+results = search_service.search("Matrix", limit=5)
+recommendations = rec_service.get_recommendations("The Matrix", n=10, method="hybrid")
 ```
-movie-recommender/
-├── README.md
-├── requirements.txt
-├── app.py                          # Streamlit web demo
-├── movie_recommender.py            # Main recommender class
-├── movie_recommender_notebook.ipynb # Interactive notebook
-├── tmdb_5000_movies.csv            # Movie dataset
-├── tmdb_5000_credits.csv           # Credits dataset
-└── *.png                           # Visualization outputs
+
+## 🧪 Testing
+
+```bash
+# Run all tests
+pytest tests/ -v
+
+# Run with coverage
+pytest tests/ -v --cov=src --cov-report=html
+
+# Run specific test categories
+pytest tests/unit/ -v
+pytest tests/integration/ -v
 ```
 
-## Methods Comparison
+## 📈 Methods Comparison
 
-| Method | Technique | Pros | Cons |
-|--------|-----------|------|------|
-| Content-Based | TF-IDF + Cosine Similarity | No user data needed, interpretable | Only recommends similar content |
-| Metadata-Based | Feature combination with weights | Multi-dimensional, accurate | Requires rich metadata |
-| Collaborative Filtering | User/Item similarity, SVD | Discovers hidden patterns | Cold start problem, needs user data |
-| Hybrid | Weighted combination | Best of all methods | Requires tuning |
+| Method | Technique | Strengths | Limitations |
+|--------|-----------|-----------|-------------|
+| Content-Based | TF-IDF + Cosine Similarity | No user data needed, interpretable | Limited to similar content |
+| Metadata-Based | Weighted feature matching | Multi-dimensional, accurate | Requires rich metadata |
+| Collaborative | User/Item similarity, SVD | Discovers hidden patterns | Cold start problem |
+| Hybrid | Weighted combination | Best of all methods | Requires weight tuning |
 
-## License
+## 📚 Documentation
 
-MIT License
+- [Architecture Guide](docs/architecture.md)
+- [API Documentation](docs/api_docs.md)
+- [Contributing Guide](docs/contributing.md)
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+See [CONTRIBUTING.md](docs/contributing.md) for detailed guidelines.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- [TMDB](https://www.themoviedb.org/) for the movie dataset
+- [Streamlit](https://streamlit.io/) for the web framework
+- [FastAPI](https://fastapi.tiangolo.com/) for the API framework
+- [SHAP](https://github.com/slundberg/shap) for explainability

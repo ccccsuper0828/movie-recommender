@@ -1,0 +1,89 @@
+/* CineMatch — Cinema-inspired dark theme
+ * Clean, modern layout with proper spacing and typography.
+ * Colors: Deep navy + Red accent + Gold highlights
+ */
+
+:root {
+    --bg-primary: #0d1117;
+    --bg-secondary: #161b22;
+    --bg-card: #1c2333;
+    --bg-card-hover: #262f40;
+    --accent-red: #e5383b;
+    --accent-red-dark: #ba181b;
+    --accent-gold: #f5c518;
+    --text-primary: #e6edf3;
+    --text-secondary: #8b949e;
+    --text-muted: #484f58;
+    --border: #30363d;
+    --success: #3fb950;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --shadow-card: 0 1px 3px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.15);
+}
+
+/* ── Global ── */
+* { box-sizing: border-box; }
+
+.main .block-container {
+    padding: 2rem 3rem 4rem 3rem;
+    max-width: 1200px;
+}
+
+/* ── Movie Card (inline HTML) ── */
+.movie-card,
+div[style*="background:#1c2333"],
+div[style*="background:#1a1a24"] {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+div[style*="background:#1c2333"]:hover,
+div[style*="background:#1a1a24"]:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-card);
+}
+
+/* ── Compact cards (Trending / Top Rated) ── */
+div[style*="display:flex"][style*="justify-content:space-between"][style*="border:1px"] {
+    transition: background 0.2s ease;
+}
+div[style*="display:flex"][style*="justify-content:space-between"][style*="border:1px"]:hover {
+    background: var(--bg-card-hover) !important;
+}
+
+/* ── Genre tags ── */
+span[style*="text-transform:uppercase"] {
+    transition: background 0.15s ease;
+}
+span[style*="text-transform:uppercase"]:hover {
+    background: rgba(229,56,59,0.25) !important;
+}
+
+/* ── Sidebar brand area ── */
+[data-testid="stSidebar"] > div:first-child {
+    padding-top: 1rem;
+}
+
+/* ── Plotly charts — dark background ── */
+.js-plotly-plot .main-svg {
+    background: var(--bg-card) !important;
+    border-radius: var(--radius-lg);
+}
+
+/* ── Spinner ── */
+.stSpinner > div {
+    border-top-color: var(--accent-red) !important;
+}
+
+/* ── Toast / success messages ── */
+.stSuccess {
+    background: rgba(63,185,80,0.1) !important;
+    color: var(--success) !important;
+    border-radius: var(--radius-md) !important;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+    .main .block-container {
+        padding: 1rem 1rem 3rem 1rem;
+    }
+}
