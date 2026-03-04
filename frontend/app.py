@@ -382,14 +382,12 @@ def render_recommendations_page(movies_df, recommender, preprocessor, settings):
                                                 orientation='h',
                                                 title='Top 20 Features by Mean |SHAP Value|',
                                                 color='importance',
-                                                color_continuous_scale='Reds'
+                                                color_continuous_scale='Reds',
+                                                template='plotly_dark',
                                             )
                                             fig_fi.update_layout(
                                                 yaxis=dict(autorange="reversed"),
-                                                plot_bgcolor='#0d1117',
-                                                paper_bgcolor='#0d1117',
-                                                font_color='#ffffff',
-                                                height=500
+                                                height=500,
                                             )
                                             st.plotly_chart(fig_fi, use_container_width=True)
 
@@ -626,8 +624,7 @@ def render_analytics_page(movies_df, recommender=None):
                 color_discrete_sequence=["#58a6ff", "#3fb950", "#bc8cff", "#e5383b"]
             )
             fig.update_layout(
-                plot_bgcolor="#0d1117", paper_bgcolor="#0d1117",
-                font_color="#e6edf3", height=400, legend_title_text="Method"
+                height=400, legend_title_text="Method", template="plotly_dark",
             )
             st.plotly_chart(fig, use_container_width=True)
 
@@ -642,11 +639,11 @@ def render_analytics_page(movies_df, recommender=None):
             fig_ba = px.bar(
                 melted_ba, x="Metric", y="Score", color="method",
                 barmode="group", title="Beyond-Accuracy Metrics",
-                color_discrete_sequence=["#58a6ff", "#3fb950", "#bc8cff", "#e5383b"]
+                color_discrete_sequence=["#58a6ff", "#3fb950", "#bc8cff", "#e5383b"],
+                template="plotly_dark",
             )
             fig_ba.update_layout(
-                plot_bgcolor="#0d1117", paper_bgcolor="#0d1117",
-                font_color="#e6edf3", height=400, legend_title_text="Method"
+                height=400, legend_title_text="Method",
             )
             st.plotly_chart(fig_ba, use_container_width=True)
 
@@ -709,11 +706,11 @@ def render_box_office_page(movies_df):
                     fi.head(15), x="importance", y="feature", orientation="h",
                     title="Top-15 Feature Importance (LightGBM gain)",
                     color="importance", color_continuous_scale="Reds",
+                    template="plotly_dark",
                 )
                 fig_fi.update_layout(
                     yaxis=dict(autorange="reversed"),
-                    plot_bgcolor="#0d1117", paper_bgcolor="#0d1117",
-                    font_color="#e6edf3", height=450,
+                    height=450,
                 )
                 st.plotly_chart(fig_fi, use_container_width=True)
 
@@ -727,16 +724,14 @@ def render_box_office_page(movies_df):
                 hover_name="title", opacity=0.6,
                 labels={"revenue": "Actual Revenue ($)", "predicted_revenue": "Predicted ($)"},
                 title="Actual vs Predicted Revenue (Kaggle train sample)",
+                template="plotly_dark",
             )
             max_val = max(sample["revenue"].max(), sample["predicted_revenue"].max())
             fig_sc.add_shape(
                 type="line", x0=0, y0=0, x1=max_val, y1=max_val,
-                line=dict(color="red", dash="dash"),
+                line=dict(color="#e5383b", dash="dash"),
             )
-            fig_sc.update_layout(
-                plot_bgcolor="#0d1117", paper_bgcolor="#0d1117",
-                font_color="#e6edf3", height=500,
-            )
+            fig_sc.update_layout(height=500)
             st.plotly_chart(fig_sc, use_container_width=True)
 
         except Exception as e:
