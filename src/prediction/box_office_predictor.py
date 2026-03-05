@@ -508,6 +508,15 @@ class BoxOfficePredictor:
             raise RuntimeError("Call fit() first.")
         X = self._build_features(df)
 
+        # Add target-encoding columns with global mean (safe default for unseen data)
+        global_mean = 16.0  # approx mean of log1p(revenue)
+        for col in self.FEATURE_COLS:
+            if col not in X.columns:
+                X[col] = global_mean if col.endswith("_te") else 0.0
+
+        # Ensure column order matches training
+        X = X.reindex(columns=self.FEATURE_COLS, fill_value=0.0)
+
         parts, weights = [], []
         if self.lgb_models:
             p = np.mean([m.predict(X) for m in self.lgb_models], axis=0)
