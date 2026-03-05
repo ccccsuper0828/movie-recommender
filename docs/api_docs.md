@@ -42,12 +42,12 @@ Request example:
 {
   "title": "The Matrix",
   "top_n": 5,
-  "method": "hybrid",
+    "method": "hybrid",
   "weights": {
     "content": 0.3,
     "metadata": 0.4,
     "cf": 0.3
-  }
+        }
 }
 ```
 
@@ -59,7 +59,7 @@ Request example:
 {
   "titles": ["The Matrix", "Inception"],
   "top_n": 5,
-  "method": "hybrid"
+    "method": "hybrid"
 }
 ```
 
