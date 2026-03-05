@@ -56,10 +56,10 @@ def load_recommenders(_movies_df):
 @st.cache_resource
 def load_shap_explainer(_movies_df, _similarity_matrix):
     """Load and train the SHAP explainer (cached)."""
-    from src.explainability import SHAPExplainer
-    if SHAPExplainer is None:
-        return None
     try:
+        from src.explainability import SHAPExplainer
+        if SHAPExplainer is None:
+            return None
         explainer = SHAPExplainer(_movies_df, _similarity_matrix)
         explainer.train(n_samples=10000)
         return explainer
