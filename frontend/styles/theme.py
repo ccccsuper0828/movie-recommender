@@ -2,6 +2,7 @@
 Theme configuration for the Streamlit frontend.
 Cinema-inspired dark theme with clean typography.
 """
+# @author 成员 F — 前端框架 & API & 测试
 
 from pathlib import Path
 
@@ -239,7 +240,12 @@ hr {{
 /* ── Plotly chart container ── */
 .js-plotly-plot, .plotly {{
     border-radius: 12px !important;
-    overflow: hidden;
+}}
+[data-testid="stPlotlyChart"] {{
+    min-height: 400px !important;
+}}
+iframe[title="streamlit_plotly_events.streamlit_plotly_events"] {{
+    min-height: 400px !important;
 }}
 
 /* ── Warning / info / error ── */

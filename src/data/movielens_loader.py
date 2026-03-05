@@ -5,6 +5,7 @@ Loads the MovieLens 1M dataset and links it to the existing TMDB 5000
 movie catalog via fuzzy title matching, producing a real user-movie
 rating matrix that replaces the previously simulated one.
 """
+# @author 成员 A — 数据工程 & 预处理
 
 import re
 import logging

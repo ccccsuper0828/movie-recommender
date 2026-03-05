@@ -1,6 +1,7 @@
 """
 Text processing utilities for the Movie Recommendation System.
 """
+# @author 成员 B — 基础推荐算法 & 工具库
 
 import re
 from typing import List, Set, Optional

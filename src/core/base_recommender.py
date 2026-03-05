@@ -1,6 +1,7 @@
 """
 Base recommender abstract class defining the interface for all recommenders.
 """
+# @author 成员 B — 基础推荐算法 & 工具库
 
 from abc import ABC, abstractmethod
 from typing import List, Optional, Dict, Any, Tuple

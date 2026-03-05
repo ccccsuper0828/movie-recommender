@@ -1,6 +1,7 @@
 """
 Cache manager for similarity matrices and computed data.
 """
+# @author 成员 A — 数据工程 & 预处理
 
 import numpy as np
 import pickle

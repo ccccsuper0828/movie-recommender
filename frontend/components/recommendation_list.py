@@ -1,6 +1,7 @@
 """
 Recommendation list component.
 """
+# @author 成员 F — 前端框架 & API & 测试
 
 import streamlit as st
 import pandas as pd

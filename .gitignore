@@ -31,7 +31,12 @@ data/cache/
 data/processed/
 *.pkl
 
+# Archive (old/unused files)
+archive/
+
 # Large CSV data (tracked via Git LFS or download separately)
 # Uncomment below to exclude data from repo:
 # data/raw/*.csv
 # data/raw/kaggle_bo/*.csv
+archive/
+anaconda_projects/

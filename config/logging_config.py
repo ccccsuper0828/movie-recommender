@@ -2,6 +2,7 @@
 Logging configuration for the Movie Recommendation System.
 Provides structured logging with configurable output formats.
 """
+# @author 成员 A — 数据工程 & 预处理
 
 import logging
 import sys

@@ -1,6 +1,7 @@
 """
 Visualization utilities for recommendation explanations.
 """
+# @author 成员 E — 可解释性 & 评估系统
 
 from typing import Optional, Dict, List, Any, Tuple
 import numpy as np

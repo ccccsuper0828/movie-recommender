@@ -1,6 +1,7 @@
 """
 Analytics dashboard for the movie recommendation system.
 """
+# @author 成员 D — 票房预测 & 数据可视化
 
 import pandas as pd
 import numpy as np

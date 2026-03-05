@@ -11,6 +11,7 @@ Workflow
     items using Precision@K, Recall@K, NDCG@K, MAP@K, Coverage, Novelty,
     and Diversity.
 """
+# @author 成员 E — 可解释性 & 评估系统
 
 import logging
 from typing import Dict, List, Optional, Any

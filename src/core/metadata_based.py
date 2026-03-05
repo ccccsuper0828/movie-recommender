@@ -1,6 +1,7 @@
 """
 Metadata-based recommendation using genres, directors, cast, and keywords.
 """
+# @author 成员 B — 基础推荐算法 & 工具库
 
 from typing import Optional, List, Dict, Any
 import pandas as pd

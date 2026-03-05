@@ -5,6 +5,7 @@ Reference: Movie-Analysis project §4.1 — "基于人口统计学的推荐"
   score = (v / (v + m)) * r + (m / (m + v)) * c
 where v = vote_count, m = min_votes (90th percentile), r = vote_average, c = global mean.
 """
+# @author 成员 B — 基础推荐算法 & 工具库
 
 import logging
 from typing import Optional, List

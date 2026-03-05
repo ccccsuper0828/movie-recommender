@@ -1,6 +1,7 @@
 """
 FastAPI main application for the Movie Recommendation System.
 """
+# @author 成员 F — 前端框架 & API & 测试
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

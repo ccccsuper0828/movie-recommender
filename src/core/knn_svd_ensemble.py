@@ -7,6 +7,7 @@ Reference: Movie-Analysis project §5.3 — "用户 KNN + 奇异值分解"
   3. SVD re-ranking: predict the target user's rating for every candidate
      using truncated SVD on the training rating matrix, pick top-n.
 """
+# @author 成员 C — 进阶推荐算法 & 推荐页面
 
 import logging
 from typing import Optional, List, Tuple

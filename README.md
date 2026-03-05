@@ -1,231 +1,325 @@
-# 🎬 CineMatch - Movie Recommendation System
+# 🎬 CineMatch — Movie Recommendation & Box Office Prediction System
 
-A professional, modular movie recommendation system featuring multiple ML algorithms, a REST API, and an interactive web interface.
+A full-stack movie analytics platform featuring **8 recommendation algorithms**, **box office revenue prediction** (Kaggle Top 1-3%), **SHAP explainability**, and a **Streamlit web app** — all built on real TMDB + MovieLens data.
 
-![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)
-![Streamlit](https://img.shields.io/badge/Streamlit-1.28+-red.svg)
-![License](https://img.shields.io/badge/License-MIT-yellow.svg)
+---
 
-## ✨ Features
-
-### Recommendation Algorithms
-
-1. **Content-Based Filtering** - TF-IDF vectorization of movie descriptions with cosine similarity
-2. **Metadata-Based Filtering** - Weighted combination of genres, directors, cast, and keywords
-3. **Collaborative Filtering** - Item-based CF, User-based CF, and SVD matrix factorization
-4. **Hybrid Recommender** - Intelligent combination of all methods with customizable weights
-
-### Explainability
-
-- **Rule-Based Explanations** - Human-readable reasons for recommendations
-- **SHAP Integration** - Feature importance analysis for ML transparency
-
-### Technical Features
-
-- 🚀 **FastAPI REST API** - Production-ready backend with OpenAPI documentation
-- 🎨 **Modern Web UI** - Cinema-inspired Streamlit frontend
-- 📊 **Analytics Dashboard** - System metrics and performance tracking
-- 🧪 **Comprehensive Tests** - Unit and integration test suite
-- 🐳 **Docker Support** - Containerized deployment ready
-
-## 📊 Dataset
-
-Uses the [TMDB 5000 Movie Dataset](https://www.kaggle.com/datasets/tmdb/tmdb-movie-metadata):
-- ~4,800 movies with rich metadata
-- Genres, keywords, cast, and crew information
-- Plot descriptions and user ratings
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Python 3.9+
-- pip or conda
-
-### Installation
+## Quick Start
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-username/cinematch.git
-cd cinematch
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# Install dependencies
+# 1. Install dependencies
 pip install -r requirements.txt
 
-# Download data files to data/raw/
-# - tmdb_5000_movies.csv
-# - tmdb_5000_credits.csv
+# 2. Run the web app
+cd MOVIE
+PYTHONPATH=$(pwd) streamlit run frontend/app.py --server.port 8501
+
+# 3. Open http://localhost:8501
 ```
 
-### Run the Application
+---
 
-```bash
-# Start the Streamlit frontend
-streamlit run frontend/app.py
-
-# Start the FastAPI backend (in another terminal)
-uvicorn api.main:app --reload
-```
-
-Access:
-- **Frontend**: http://localhost:8501
-- **API Docs**: http://localhost:8000/docs
-
-### Docker Deployment
-
-```bash
-# Build and run all services
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-```
-
-## 📁 Project Structure
+## Project Structure
 
 ```
 MOVIE/
-├── config/                 # Configuration management
-│   ├── settings.py         # Environment-based settings
-│   └── logging_config.py   # Logging configuration
 │
-├── src/                    # Core source code
-│   ├── core/               # Recommendation algorithms
-│   │   ├── base_recommender.py
-│   │   ├── content_based.py
-│   │   ├── metadata_based.py
-│   │   ├── collaborative.py
-│   │   └── hybrid.py
-│   ├── data/               # Data loading and preprocessing
-│   ├── explainability/     # Explanation generation
-│   ├── models/             # Data models and schemas
-│   ├── services/           # Business logic layer
-│   └── utils/              # Utility functions
+├── app.py                          # Entry point (for Streamlit Cloud)
+├── requirements.txt                # Python dependencies
+├── Dockerfile                      # Docker build
+├── docker-compose.yml              # Multi-service orchestration
 │
-├── api/                    # FastAPI REST API
-│   ├── main.py
-│   ├── dependencies.py
-│   └── routes/
+├── config/                         # Configuration
+│   ├── settings.py                 # Pydantic Settings (env vars + defaults)
+│   └── logging_config.py           # Logging setup
 │
-├── frontend/               # Streamlit web interface
-│   ├── app.py
-│   ├── components/
-│   └── styles/
+├── src/                            # ── Core Source Code ──
+│   ├── registry.py                 # 🔌 Model Registry (plug-and-play)
+│   │
+│   ├── core/                       # Recommendation Algorithms
+│   │   ├── base_recommender.py     #   Abstract interface
+│   │   ├── content_based.py        #   TF-IDF cosine similarity
+│   │   ├── metadata_based.py       #   Genre/Director/Cast weighted matching
+│   │   ├── collaborative.py        #   Item-CF / User-CF / SVD
+│   │   ├── hybrid.py               #   Weighted fusion of all methods
+│   │   ├── demographic.py          #   IMDB weighted rating formula
+│   │   └── knn_svd_ensemble.py     #   User-KNN + SVD re-ranking
+│   │
+│   ├── prediction/                 # Box Office Prediction
+│   │   ├── base_predictor.py       #   Abstract interface
+│   │   └── box_office_predictor.py #   LightGBM + XGBoost + CatBoost ensemble
+│   │
+│   ├── evaluation/                 # Quality Assessment
+│   │   └── evaluator.py            #   Precision/NDCG/Coverage/Novelty/Diversity
+│   │
+│   ├── explainability/             # Explainability
+│   │   ├── rule_based.py           #   Feature-matching natural language explanations
+│   │   ├── shap_explainer.py       #   SHAP TreeExplainer
+│   │   └── visualization.py        #   Waterfall / Force / Importance plots
+│   │
+│   ├── data/                       # Data Pipeline
+│   │   ├── loader.py               #   TMDB CSV loading + merging
+│   │   ├── preprocessor.py         #   JSON parsing, feature extraction, cleaning
+│   │   ├── movielens_loader.py     #   MovieLens ↔ TMDB title matching
+│   │   └── cache_manager.py        #   Similarity matrix caching (pickle + TTL)
+│   │
+│   ├── services/                   # Business Logic Layer
+│   │   ├── recommendation_service.py
+│   │   ├── search_service.py
+│   │   ├── user_service.py
+│   │   └── analytics_service.py
+│   │
+│   ├── models/                     # Data Models
+│   │   ├── movie.py                #   Movie dataclass
+│   │   ├── user.py                 #   User dataclass
+│   │   └── schemas.py              #   Pydantic request/response schemas
+│   │
+│   └── utils/                      # Utilities
+│       ├── metrics.py              #   7 evaluation metrics
+│       ├── similarity.py           #   Distance/similarity functions
+│       └── text_processing.py      #   NLP helpers
 │
-├── analytics/              # Analytics and metrics
-├── tests/                  # Test suite
-├── docs/                   # Documentation
-└── data/                   # Data files
+├── frontend/                       # ── Streamlit Web App ──
+│   ├── app.py                      # Main app (8 pages, routing, caching)
+│   ├── components/                 # Reusable UI components
+│   │   ├── charts.py               #   Plotly chart wrappers
+│   │   ├── movie_card.py           #   Movie card HTML component
+│   │   ├── recommendation_list.py  #   Recommendation list renderer
+│   │   ├── explanation_panel.py    #   SHAP/rule explanation panel
+│   │   ├── search_bar.py           #   Search + autocomplete
+│   │   └── sidebar.py              #   Navigation + settings
+│   └── styles/                     # Theme
+│       ├── theme.py                #   Color palette + CSS injection
+│       └── main.css                #   Global styles
+│
+├── api/                            # ── FastAPI REST API ──
+│   ├── main.py                     # App factory + CORS + lifespan
+│   ├── dependencies.py             # Dependency injection (singletons)
+│   └── routes/                     # Endpoint handlers
+│       ├── health.py               #   /health, /ready, /live
+│       ├── recommendations.py      #   /api/v1/recommendations
+│       ├── movies.py               #   /api/v1/movies
+│       └── users.py                #   /api/v1/users
+│
+├── analytics/                      # EDA Visualization Helpers
+│   ├── visualizations.py
+│   ├── dashboard.py
+│   └── metrics_tracker.py
+│
+├── tests/                          # ── Test Suite ──
+│   ├── conftest.py                 # Shared fixtures
+│   ├── unit/                       # Unit tests
+│   └── integration/                # Integration tests
+│
+├── data/                           # ── Data Files ──
+│   ├── raw/                        # Source datasets
+│   │   ├── tmdb_5000_movies.csv    #   TMDB 5000 (4803 movies)
+│   │   ├── tmdb_5000_credits.csv   #   Cast + crew
+│   │   ├── ml_ratings.csv          #   MovieLens 1M ratings
+│   │   ├── ml_movies.csv           #   MovieLens movie metadata
+│   │   ├── ml_users.csv            #   MovieLens user demographics
+│   │   └── kaggle_bo/              #   Kaggle Box Office competition data
+│   │       ├── train.csv           #     3000 movies with revenue
+│   │       ├── test.csv            #     4398 movies (no revenue)
+│   │       ├── TrainAdditionalFeatures.csv
+│   │       ├── TestAdditionalFeatures.csv
+│   │       └── release_dates_per_country.csv
+│   ├── processed/                  # Generated outputs
+│   └── cache/                      # Model cache (box_office_model.pkl)
+│
+├── docs/                           # ── Documentation ──
+│   ├── 项目文档与分工.md            # Full project doc + 6-person assignment
+│   ├── api_docs.md                 # REST API reference
+│   ├── architecture.md             # System architecture
+│   └── contributing.md             # Contribution guidelines
+│
+├── tmdb_analysis.ipynb             # EDA Notebook (Jupyter)
+│
+└── archive/                        # Old/unused files (gitignored)
+    ├── movie_recommender_notebook.ipynb
+    ├── scripts/
+    └── catboost_info/
 ```
 
-## 💻 Usage
+---
 
-### Python API
+## Features
 
-```python
-from src.core import HybridRecommender
-from src.data import DataLoader, DataPreprocessor
+### 1. Movie Recommendation (8 methods)
 
-# Load and preprocess data
-loader = DataLoader()
-merged_df = loader.get_merged_data()
-preprocessor = DataPreprocessor(merged_df)
-movies_df = preprocessor.preprocess()
+| Method | Type | Algorithm |
+|--------|------|-----------|
+| Content-Based | Item | TF-IDF + Cosine Similarity on plot text |
+| Metadata-Based | Item | Weighted genre/director/cast/keyword matching |
+| Collaborative Filtering | User | Item-CF, User-CF, SVD matrix factorization |
+| Hybrid | Ensemble | Weighted fusion (Content + Metadata + CF) |
+| Demographic | Non-personalized | IMDB weighted rating formula |
+| KNN+SVD Ensemble | User | User-KNN candidate generation + SVD re-ranking |
 
-# Initialize recommender
-recommender = HybridRecommender()
-recommender.fit(movies_df)
+### 2. Box Office Prediction
 
-# Get recommendations
-recommendations = recommender.recommend("The Matrix", n_recommendations=10)
-print(recommendations[['title', 'hybrid_score']])
+- **Models**: CatBoost + XGBoost + LightGBM (5-fold CV)
+- **Features**: 55 dimensions (budget, popularity, genres, director target encoding, release timing, production company, etc.)
+- **RMSLE**: 1.79 (≈ Kaggle Top 1-3% out of 1400 teams)
+- **Anti-overfitting**: Balanced regularization, train-val gap ~0.5
 
-# Adjust method weights
-recommender.set_weights(
-    content_weight=0.4,
-    metadata_weight=0.3,
-    cf_weight=0.3
-)
-```
+### 3. Evaluation (MovieLens ground truth)
 
-### REST API
+7 metrics: Precision@K, Recall@K, NDCG@K, MAP@K, Coverage, Novelty, Diversity
+
+### 4. Explainability
+
+- Rule-based natural language explanations
+- SHAP waterfall + feature importance visualization
+
+### 5. Web Interface (8 pages)
+
+| Page | Description |
+|------|-------------|
+| 🏠 Home | Hero + quick recommendations + trending/top-rated |
+| 🎯 Get Recommendations | 6 method tabs + SHAP deep-dive |
+| 🔍 Explore | Browse all 4803 movies with filters |
+| 📊 Analytics | EDA charts + MovieLens evaluation dashboard |
+| 💰 Box Office Prediction | Train/evaluate + custom movie prediction |
+| ⚖️ Compare Methods | Side-by-side method comparison |
+| ℹ️ About | Project info |
+
+---
+
+## How to Run
+
+### Local Development
 
 ```bash
-# Get recommendations
-curl "http://localhost:8000/api/v1/recommendations/The%20Matrix?top_n=5&method=hybrid"
+# Install
+pip install -r requirements.txt
 
-# Search/list movies
-curl "http://localhost:8000/api/v1/movies/?query=inception&page=1&page_size=10"
+# Streamlit frontend
+cd MOVIE
+PYTHONPATH=$(pwd) streamlit run frontend/app.py --server.port 8501
 
-# Get movie details by title
-curl "http://localhost:8000/api/v1/movies/The%20Matrix"
+# FastAPI backend (optional, separate terminal)
+PYTHONPATH=$(pwd) uvicorn api.main:app --port 8000
 ```
 
-### Using Services
-
-```python
-from src.services import RecommendationService, SearchService
-
-# Initialize services
-rec_service = RecommendationService(movies_df)
-search_service = SearchService(movies_df)
-
-# Search and recommend
-results = search_service.search("Matrix", limit=5)
-recommendations = rec_service.get_recommendations("The Matrix", n=10, method="hybrid")
-```
-
-## 🧪 Testing
+### Docker
 
 ```bash
-# Run all tests
-pytest tests/ -v
-
-# Run with coverage
-pytest tests/ -v --cov=src --cov-report=html
-
-# Run specific test categories
-pytest tests/unit/ -v
-pytest tests/integration/ -v
+docker-compose up -d --build
+# Frontend: http://localhost:8501
+# API: http://localhost:8000/docs
 ```
 
-## 📈 Methods Comparison
+### Run EDA Notebook
 
-| Method | Technique | Strengths | Limitations |
-|--------|-----------|-----------|-------------|
-| Content-Based | TF-IDF + Cosine Similarity | No user data needed, interpretable | Limited to similar content |
-| Metadata-Based | Weighted feature matching | Multi-dimensional, accurate | Requires rich metadata |
-| Collaborative | User/Item similarity, SVD | Discovers hidden patterns | Cold start problem |
-| Hybrid | Weighted combination | Best of all methods | Requires weight tuning |
+```bash
+jupyter notebook tmdb_analysis.ipynb
+```
 
-## 📚 Documentation
+### Run Tests
 
-- [Architecture Guide](docs/architecture.md)
-- [API Documentation](docs/api_docs.md)
-- [Contributing Guide](docs/contributing.md)
+```bash
+pytest tests/unit/ -q          # Fast unit tests
+```
 
-## 🤝 Contributing
+---
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+## How to Add / Replace a Model
 
-See [CONTRIBUTING.md](docs/contributing.md) for detailed guidelines.
+### Add a New Recommender
 
-## 📄 License
+```python
+# 1. Create src/core/my_recommender.py
+from src.core.base_recommender import BaseRecommender
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+class MyRecommender(BaseRecommender):
+    def fit(self, movies_df, **kwargs):
+        # Your training logic
+        self._is_fitted = True
+        return self
 
-## 🙏 Acknowledgments
+    def recommend(self, title, top_n=10, **kwargs):
+        # Your recommendation logic
+        return recommendations_df
 
-- [TMDB](https://www.themoviedb.org/) for the movie dataset
-- [Streamlit](https://streamlit.io/) for the web framework
-- [FastAPI](https://fastapi.tiangolo.com/) for the API framework
-- [SHAP](https://github.com/slundberg/shap) for explainability
+# 2. Register in src/core/__init__.py
+from src.registry import RECOMMENDER_REGISTRY
+RECOMMENDER_REGISTRY.register("my_method", MyRecommender)
+```
+
+### Add a New Predictor
+
+```python
+# 1. Create src/prediction/my_predictor.py
+from src.prediction.base_predictor import BasePredictor
+
+class MyPredictor(BasePredictor):
+    def fit(self, df=None):
+        # Your training logic
+        self._is_fitted = True
+        return self
+
+    def predict(self, df):
+        # Return np.ndarray of predicted revenues
+        return predictions
+
+    def save(self, path=None): ...
+    def load(cls, path=None): ...
+
+# 2. Register in src/prediction/__init__.py
+from src.registry import PREDICTOR_REGISTRY
+PREDICTOR_REGISTRY.register("my_model", MyPredictor)
+```
+
+### Use Registry in Frontend
+
+```python
+from src.registry import RECOMMENDER_REGISTRY, PREDICTOR_REGISTRY
+
+# Get model by name (no direct import needed)
+RecClass = RECOMMENDER_REGISTRY.get("content")
+model = RecClass()
+model.fit(movies_df)
+
+# List all available models
+print(RECOMMENDER_REGISTRY.list())
+print(PREDICTOR_REGISTRY.list())
+```
+
+---
+
+## Datasets
+
+| Dataset | Size | Purpose |
+|---------|------|---------|
+| TMDB 5000 Movies + Credits | 4803 movies | Recommendation (content, metadata) |
+| MovieLens 1M | 1M ratings, 6040 users | Collaborative filtering + evaluation |
+| Kaggle TMDB Box Office | 3000 train + 4398 test | Revenue prediction |
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | Streamlit 1.45 |
+| Backend API | FastAPI |
+| ML | scikit-learn, LightGBM, XGBoost, CatBoost |
+| Explainability | SHAP |
+| Visualization | Plotly, Matplotlib |
+| Deployment | Docker, Streamlit Cloud |
+
+---
+
+## Team (6 members)
+
+| Member | Role | Key Files |
+|--------|------|-----------|
+| A | Data Engineering | `src/data/`, `config/` |
+| B | Basic Recommenders | `src/core/content_based.py`, `metadata_based.py`, `demographic.py`, `src/utils/` |
+| C | Advanced Recommenders + UI | `src/core/collaborative.py`, `knn_svd_ensemble.py`, `hybrid.py` |
+| D | Box Office Prediction + EDA | `src/prediction/`, `analytics/` |
+| E | Explainability + Evaluation | `src/explainability/`, `src/evaluation/` |
+| F | Frontend + API + Tests | `frontend/`, `api/`, `tests/`, `src/services/`, `src/models/` |
+
+Full documentation: [docs/项目文档与分工.md](docs/项目文档与分工.md)

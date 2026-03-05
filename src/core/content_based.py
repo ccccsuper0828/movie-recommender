@@ -1,6 +1,7 @@
 """
 Content-based recommendation using TF-IDF and cosine similarity.
 """
+# @author 成员 B — 基础推荐算法 & 工具库
 
 from typing import Optional, List, Tuple
 import pandas as pd

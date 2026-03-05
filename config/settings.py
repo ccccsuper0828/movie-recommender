@@ -2,6 +2,7 @@
 Central configuration settings for the Movie Recommendation System.
 Uses environment variables with sensible defaults.
 """
+# @author 成员 A — 数据工程 & 预处理
 
 import os
 from pathlib import Path

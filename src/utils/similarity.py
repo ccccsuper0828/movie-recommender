@@ -1,6 +1,7 @@
 """
 Similarity calculation utilities for the Movie Recommendation System.
 """
+# @author 成员 B — 基础推荐算法 & 工具库
 
 import numpy as np
 from typing import List, Set, Union, Optional

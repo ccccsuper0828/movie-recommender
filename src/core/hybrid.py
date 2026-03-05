@@ -1,6 +1,7 @@
 """
 Hybrid recommendation combining multiple methods.
 """
+# @author 成员 C — 进阶推荐算法 & 推荐页面
 
 from typing import Optional, List, Dict, Tuple, Any
 import pandas as pd

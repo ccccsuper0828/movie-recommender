@@ -1,6 +1,7 @@
 """
 Collaborative filtering recommendation using user-item interactions.
 """
+# @author 成员 C — 进阶推荐算法 & 推荐页面
 
 from typing import Optional, List, Tuple, Literal
 import pandas as pd

@@ -2,6 +2,7 @@
 CineMatch - Movie Recommendation System
 Main Streamlit Application
 """
+# @author 成员 F — 前端框架 & API & 测试 (+ 成员 C/D/E 各自页面部分)
 
 import streamlit as st
 import pandas as pd
@@ -139,11 +140,19 @@ def _get_knn_svd_recs(movies_df, title, top_n):
 
 
 @st.cache_resource
-def _fit_box_office():
-    """Train the box office predictor on Kaggle competition data (cached)."""
+def _fit_box_office(_version=7):
+    """Load saved model or train from scratch."""
     from src.prediction import BoxOfficePredictor
+    # Try loading saved model first (instant)
+    try:
+        bp = BoxOfficePredictor.load()
+        return bp
+    except FileNotFoundError:
+        pass
+    # No saved model → train and save
     bp = BoxOfficePredictor(n_folds=5, seed=2019)
     bp.fit()
+    bp.save()
     return bp
 
 
@@ -389,7 +398,7 @@ def render_recommendations_page(movies_df, recommender, preprocessor, settings):
                                                 yaxis=dict(autorange="reversed"),
                                                 height=500,
                                             )
-                                            st.plotly_chart(fig_fi, use_container_width=True)
+                                            st.plotly_chart(fig_fi, use_container_width=True, theme=None)
 
                 else:
                     st.warning("No recommendations found.")
@@ -537,6 +546,58 @@ def render_analytics_page(movies_df, recommender=None):
                 pass
     Charts.movies_timeline(year_counts)
 
+    # ── EDA: Budget vs Revenue + Genre Profit + Correlation ──
+    st.markdown("---")
+    st.markdown("### 📊 EDA — Exploratory Data Analysis")
+
+    import plotly.express as px_eda
+
+    df_viz = movies_df[(movies_df['budget'] > 0) & (movies_df['revenue'] > 0)].copy()
+
+    eda_col1, eda_col2 = st.columns(2)
+
+    with eda_col1:
+        # Budget vs Revenue
+        if len(df_viz) > 0:
+            fig_bvr = px_eda.scatter(
+                df_viz, x="budget", y="revenue", hover_name="title",
+                opacity=0.5, title="Budget vs Revenue",
+                labels={"budget": "Budget ($)", "revenue": "Revenue ($)"},
+                template="plotly_white",
+            )
+            max_v = max(df_viz["budget"].max(), df_viz["revenue"].max())
+            fig_bvr.add_shape(type="line", x0=0, y0=0, x1=max_v, y1=max_v,
+                              line=dict(color="red", dash="dash"))
+            fig_bvr.update_layout(height=400)
+            st.plotly_chart(fig_bvr, use_container_width=True, theme=None)
+
+    with eda_col2:
+        # Correlation heatmap
+        num_cols = ["budget", "revenue", "popularity", "vote_average", "vote_count", "runtime"]
+        available_num = [c for c in num_cols if c in movies_df.columns]
+        if len(available_num) >= 2:
+            corr = movies_df[available_num].corr()
+            fig_corr = px_eda.imshow(
+                corr, text_auto=".2f", aspect="auto",
+                title="Feature Correlation Heatmap",
+                color_continuous_scale="RdBu_r", template="plotly_white",
+            )
+            fig_corr.update_layout(height=400)
+            st.plotly_chart(fig_corr, use_container_width=True, theme=None)
+
+    # Genre Profit Ranking
+    if "revenue" in df_viz.columns and "genres_list" in df_viz.columns:
+        df_viz["profit"] = df_viz["revenue"] - df_viz["budget"]
+        genre_profit = df_viz.explode("genres_list").groupby("genres_list")["profit"].mean().sort_values(ascending=True)
+        fig_gp = px_eda.bar(
+            x=genre_profit.values, y=genre_profit.index, orientation="h",
+            title="Average Profit by Genre",
+            labels={"x": "Average Profit ($)", "y": "Genre"},
+            template="plotly_white",
+        )
+        fig_gp.update_layout(height=450)
+        st.plotly_chart(fig_gp, use_container_width=True, theme=None)
+
     # ── MovieLens Evaluation Section ──
     st.markdown("---")
     st.markdown("### 🧪 Recommendation Quality Evaluation (MovieLens)")
@@ -570,14 +631,14 @@ def render_analytics_page(movies_df, recommender=None):
                         recommender, k=eval_k, max_eval_users=eval_users
                     )
                     st.session_state["eval_results"] = results_df
-                    st.session_state["eval_k"] = eval_k
+                    st.session_state["eval_k_val"] = eval_k
                 except Exception as e:
                     st.error(f"Evaluation failed: {e}")
 
     # Show results if available (persists across reruns)
     if "eval_results" in st.session_state:
         results_df = st.session_state["eval_results"]
-        eval_k_display = st.session_state.get("eval_k", 10)
+        eval_k_display = st.session_state.get("eval_k_val", 10)
         import plotly.express as px
 
         if "error" in results_df.columns:
@@ -624,9 +685,9 @@ def render_analytics_page(movies_df, recommender=None):
                 color_discrete_sequence=["#58a6ff", "#3fb950", "#bc8cff", "#e5383b"]
             )
             fig.update_layout(
-                height=400, legend_title_text="Method", template="plotly_dark",
+                height=400, legend_title_text="Method", template="plotly_white",
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, theme=None)
 
         # Beyond-accuracy chart
         ba_metrics = ["coverage", "novelty", "diversity"]
@@ -640,12 +701,12 @@ def render_analytics_page(movies_df, recommender=None):
                 melted_ba, x="Metric", y="Score", color="method",
                 barmode="group", title="Beyond-Accuracy Metrics",
                 color_discrete_sequence=["#58a6ff", "#3fb950", "#bc8cff", "#e5383b"],
-                template="plotly_dark",
+                template="plotly_white",
             )
             fig_ba.update_layout(
                 height=400, legend_title_text="Method",
             )
-            st.plotly_chart(fig_ba, use_container_width=True)
+            st.plotly_chart(fig_ba, use_container_width=True, theme=None)
 
         st.success(f"✅ Evaluation complete — {results_df['n_eval_users'].iloc[0]} users, K={eval_k_display}")
 
@@ -678,6 +739,7 @@ def render_box_office_page(movies_df):
     if st.session_state.get("bo_trained"):
         try:
             import plotly.express as px
+            import plotly.graph_objects as go
             bp = _fit_box_office()
             cv = bp.cv_results
 
@@ -699,6 +761,120 @@ def render_box_office_page(movies_df):
 
             st.markdown(f"**Ensemble**: {cv.get('models', '')}")
 
+            # ── Training Process Charts ──
+            st.markdown("#### 📉 Training Process")
+
+            # 1) Per-fold RMSE comparison bar chart
+            fold_data = bp.fold_results
+            if fold_data:
+                fold_rows = []
+                for fd in fold_data:
+                    fnum = fd["fold"]
+                    if "lgb_rmse" in fd:
+                        fold_rows.append({"Fold": f"Fold {fnum}", "Model": "LightGBM", "RMSE": fd["lgb_rmse"]})
+                    if "xgb_rmse" in fd:
+                        fold_rows.append({"Fold": f"Fold {fnum}", "Model": "XGBoost", "RMSE": fd["xgb_rmse"]})
+                    if "cat_rmse" in fd:
+                        fold_rows.append({"Fold": f"Fold {fnum}", "Model": "CatBoost", "RMSE": fd["cat_rmse"]})
+
+                import pandas as pd_fold
+                fold_df = pd.DataFrame(fold_rows)
+                fig_folds = px.bar(
+                    fold_df, x="Fold", y="RMSE", color="Model", barmode="group",
+                    title="Validation RMSE per Fold (lower is better)",
+                    color_discrete_map={"LightGBM": "#3fb950", "XGBoost": "#58a6ff", "CatBoost": "#f5c518"},
+                    template="plotly_white",
+                )
+                fig_folds.update_layout(height=350)
+                st.plotly_chart(fig_folds, use_container_width=True, theme=None)
+
+            # 2) Learning curves (first fold) — Train Loss & Val Loss
+            fd0 = fold_data[0] if fold_data else {}
+            has_lgb = "lgb_val_curve" in fd0 or "lgb_curve" in fd0
+            has_xgb = "xgb_val_curve" in fd0 or "xgb_curve" in fd0
+
+            if has_lgb or has_xgb:
+                st.markdown("#### 📈 Train Loss & Val Loss (Fold 1)")
+
+                def _subsample(curve, n=300):
+                    step = max(1, len(curve) // n)
+                    xs = list(range(0, len(curve), step))
+                    ys = [curve[i] for i in xs]
+                    return xs, ys
+
+                # LightGBM chart
+                if has_lgb:
+                    fig_lgb = go.Figure()
+                    train_c = fd0.get("lgb_train_curve", [])
+                    val_c = fd0.get("lgb_val_curve", fd0.get("lgb_curve", []))
+                    if train_c:
+                        xs, ys = _subsample(train_c)
+                        fig_lgb.add_trace(go.Scatter(
+                            x=xs, y=ys, mode="lines", name="Train Loss",
+                            line=dict(color="#3fb950", width=2),
+                        ))
+                    if val_c:
+                        xs, ys = _subsample(val_c)
+                        fig_lgb.add_trace(go.Scatter(
+                            x=xs, y=ys, mode="lines", name="Val Loss",
+                            line=dict(color="#e5383b", width=2),
+                        ))
+                    fig_lgb.update_layout(
+                        title="LightGBM — Train vs Validation RMSE",
+                        xaxis_title="Boosting Round", yaxis_title="RMSE",
+                        template="plotly_white", height=380,
+                    )
+                    st.plotly_chart(fig_lgb, use_container_width=True, theme=None)
+
+                # XGBoost chart
+                if has_xgb:
+                    fig_xgb = go.Figure()
+                    train_c = fd0.get("xgb_train_curve", [])
+                    val_c = fd0.get("xgb_val_curve", fd0.get("xgb_curve", []))
+                    if train_c:
+                        xs, ys = _subsample(train_c)
+                        fig_xgb.add_trace(go.Scatter(
+                            x=xs, y=ys, mode="lines", name="Train Loss",
+                            line=dict(color="#58a6ff", width=2),
+                        ))
+                    if val_c:
+                        xs, ys = _subsample(val_c)
+                        fig_xgb.add_trace(go.Scatter(
+                            x=xs, y=ys, mode="lines", name="Val Loss",
+                            line=dict(color="#e5383b", width=2),
+                        ))
+                    fig_xgb.update_layout(
+                        title="XGBoost — Train vs Validation RMSE",
+                        xaxis_title="Boosting Round", yaxis_title="RMSE",
+                        template="plotly_white", height=380,
+                    )
+                    st.plotly_chart(fig_xgb, use_container_width=True, theme=None)
+
+                # CatBoost chart
+                has_cat = "cat_val_curve" in fd0
+                if has_cat:
+                    fig_cat = go.Figure()
+                    train_c = fd0.get("cat_train_curve", [])
+                    val_c = fd0.get("cat_val_curve", [])
+                    if train_c:
+                        xs, ys = _subsample(train_c)
+                        fig_cat.add_trace(go.Scatter(
+                            x=xs, y=ys, mode="lines", name="Train Loss",
+                            line=dict(color="#f5c518", width=2),
+                        ))
+                    if val_c:
+                        xs, ys = _subsample(val_c)
+                        fig_cat.add_trace(go.Scatter(
+                            x=xs, y=ys, mode="lines", name="Val Loss",
+                            line=dict(color="#e5383b", width=2),
+                        ))
+                    fig_cat.update_layout(
+                        title="CatBoost — Train vs Validation RMSE",
+                        xaxis_title="Iteration", yaxis_title="RMSE",
+                        template="plotly_white", height=380,
+                    )
+                    st.plotly_chart(fig_cat, use_container_width=True, theme=None)
+
             # Feature importance
             fi = bp.feature_importance()
             if len(fi) > 0:
@@ -706,13 +882,13 @@ def render_box_office_page(movies_df):
                     fi.head(15), x="importance", y="feature", orientation="h",
                     title="Top-15 Feature Importance (LightGBM gain)",
                     color="importance", color_continuous_scale="Reds",
-                    template="plotly_dark",
+                    template="plotly_white",
                 )
                 fig_fi.update_layout(
                     yaxis=dict(autorange="reversed"),
                     height=450,
                 )
-                st.plotly_chart(fig_fi, use_container_width=True)
+                st.plotly_chart(fig_fi, use_container_width=True, theme=None)
 
             # Actual vs Predicted scatter
             kaggle_train, _ = bp.load_data()
@@ -724,7 +900,7 @@ def render_box_office_page(movies_df):
                 hover_name="title", opacity=0.6,
                 labels={"revenue": "Actual Revenue ($)", "predicted_revenue": "Predicted ($)"},
                 title="Actual vs Predicted Revenue (Kaggle train sample)",
-                template="plotly_dark",
+                template="plotly_white",
             )
             max_val = max(sample["revenue"].max(), sample["predicted_revenue"].max())
             fig_sc.add_shape(
@@ -732,7 +908,7 @@ def render_box_office_page(movies_df):
                 line=dict(color="#e5383b", dash="dash"),
             )
             fig_sc.update_layout(height=500)
-            st.plotly_chart(fig_sc, use_container_width=True)
+            st.plotly_chart(fig_sc, use_container_width=True, theme=None)
 
         except Exception as e:
             st.error(f"Chart rendering failed: {e}")
@@ -741,47 +917,129 @@ def render_box_office_page(movies_df):
 
     st.markdown("---")
 
-    # ── Predict for a single movie ──
-    st.markdown("### 🔮 Predict Revenue for a Movie")
-    st.caption("Select a movie from the Kaggle competition training set.")
+    # ── Predict: choose existing movie OR input custom features ──
+    st.markdown("### 🔮 Predict Revenue")
+    predict_mode = st.radio(
+        "Prediction mode",
+        ["Select existing movie", "Input custom features"],
+        horizontal=True, key="bo_predict_mode",
+    )
 
-    try:
-        bp_loaded = _fit_box_office()
-        kaggle_train, _ = bp_loaded.load_data()
-        valid_movies = kaggle_train[kaggle_train["budget"] > 0].nlargest(200, "popularity")
-        selected = st.selectbox(
-            "Select movie",
-            options=valid_movies["title"].tolist(),
-            key="bo_single_movie",
-        )
+    if predict_mode == "Select existing movie":
+        try:
+            bp_loaded = _fit_box_office()
+            kaggle_train, _ = bp_loaded.load_data()
+            valid_movies = kaggle_train[kaggle_train["budget"] > 0].nlargest(200, "popularity")
+            selected = st.selectbox("Select movie", options=valid_movies["title"].tolist(), key="bo_sel")
+            if selected and st.button("Predict", key="bo_pred_sel"):
+                row = kaggle_train[kaggle_train["title"] == selected].head(1)
+                pred = bp_loaded.predict(row)[0]
+                actual = float(row["revenue"].iloc[0])
+                budget = float(row["budget"].iloc[0])
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Budget", f"${budget/1e6:,.1f} M")
+                c2.metric("Predicted Revenue", f"${pred/1e6:,.1f} M")
+                c3.metric("Actual Revenue", f"${actual/1e6:,.1f} M" if actual > 0 else "N/A")
+                if actual > 0:
+                    err = abs(pred - actual) / actual * 100
+                    st.caption(f"Prediction error: {err:.1f}%")
+        except Exception:
+            st.info("Train the model first by clicking the button above.")
 
-        if selected and st.button("Predict", key="bo_predict_single"):
-            row = kaggle_train[kaggle_train["title"] == selected].head(1)
-            pred = bp_loaded.predict(row)[0]
-            actual = float(row["revenue"].iloc[0])
-            budget = float(row["budget"].iloc[0])
+    else:
+        # ── Custom feature input form ──
+        st.caption("Input movie features to predict box office revenue.")
+        with st.form("bo_custom_form"):
+            fc1, fc2 = st.columns(2)
+            with fc1:
+                title_input = st.text_input("Movie Title", "My Movie")
+                budget_input = st.number_input("Budget ($)", min_value=0, value=50_000_000, step=1_000_000)
+                runtime_input = st.number_input("Runtime (min)", min_value=30, max_value=300, value=120)
+                popularity_input = st.number_input("Popularity Score", min_value=0.0, value=10.0, step=0.5)
+            with fc2:
+                language_input = st.selectbox("Original Language", ["en", "fr", "de", "es", "ja", "zh", "ko", "hi", "other"])
+                release_month = st.selectbox("Release Month", list(range(1, 13)), index=5)
+                release_year = st.number_input("Release Year", min_value=1970, max_value=2030, value=2024)
+                has_homepage = st.checkbox("Has Official Homepage", value=True)
 
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Budget", f"${budget/1e6:,.1f} M")
-            c2.metric("Predicted Revenue", f"${pred/1e6:,.1f} M")
-            if actual > 0:
-                c3.metric("Actual Revenue", f"${actual/1e6:,.1f} M")
-            else:
-                c3.metric("Actual Revenue", "N/A")
+            # Genre selection
+            all_genre_opts = ["Action", "Adventure", "Animation", "Comedy", "Crime",
+                              "Documentary", "Drama", "Family", "Fantasy", "History",
+                              "Horror", "Music", "Mystery", "Romance", "Science Fiction",
+                              "Thriller", "War", "Western"]
+            genres_input = st.multiselect("Genres", all_genre_opts, default=["Action", "Adventure"])
 
-            if actual > 0:
-                error_pct = abs(pred - actual) / actual * 100
-                roi_actual = (actual - budget) / budget * 100 if budget > 0 else 0
-                roi_pred = (pred - budget) / budget * 100 if budget > 0 else 0
-                st.markdown(
-                    f'<div style="background:#1c2333;border-radius:12px;padding:16px;margin-top:12px;">'
-                    f'<p style="color:#a3a3a3;margin:0;">Prediction error: <b style="color:#f5c518;">{error_pct:.1f}%</b>'
-                    f' &nbsp;|&nbsp; Actual ROI: <b style="color:#2ecc71;">{roi_actual:.0f}%</b>'
-                    f' &nbsp;|&nbsp; Predicted ROI: <b style="color:#3498db;">{roi_pred:.0f}%</b></p></div>',
-                    unsafe_allow_html=True,
-                )
-    except Exception as e:
-        st.info("Train the model first by clicking the button above.")
+            fc3, fc4 = st.columns(2)
+            with fc3:
+                n_cast = st.slider("Number of Cast Members", 1, 50, 15)
+                n_companies = st.slider("Number of Production Companies", 1, 10, 3)
+            with fc4:
+                is_collection = st.checkbox("Part of a Collection/Franchise", value=False)
+                has_major_studio = st.checkbox("Major Studio (Warner/Disney/Universal…)", value=True)
+
+            submitted = st.form_submit_button("🎯 Predict Revenue", type="primary")
+
+        if submitted:
+            try:
+                import ast as _ast
+                bp_loaded = _fit_box_office()
+                # Build a single-row DataFrame mimicking Kaggle train format
+                genres_json = str([{"id": 0, "name": g} for g in genres_input])
+                pc_json = str([{"name": "Studio"}] * n_companies)
+                cast_json = str([{"name": f"Actor{i}"}  for i in range(n_cast)])
+                crew_json = str([{"job": "Director", "name": "Director"}])
+
+                custom_row = pd.DataFrame([{
+                    "id": 99999,
+                    "title": title_input,
+                    "budget": budget_input,
+                    "genres": genres_json,
+                    "homepage": "http://example.com" if has_homepage else None,
+                    "imdb_id": "tt0000000",
+                    "original_language": language_input,
+                    "original_title": title_input,
+                    "overview": "A movie about " + " and ".join(genres_input),
+                    "popularity": popularity_input,
+                    "production_companies": pc_json,
+                    "production_countries": '[{"iso_3166_1": "US", "name": "USA"}]',
+                    "release_date": f"{release_month}/1/{release_year % 100:02d}",
+                    "runtime": runtime_input,
+                    "spoken_languages": '[{"iso_639_1": "en", "name": "English"}]',
+                    "status": "Released",
+                    "tagline": "An epic movie" if has_homepage else None,
+                    "Keywords": "[]",
+                    "cast": cast_json,
+                    "crew": crew_json,
+                    "belongs_to_collection": '{"id":1}' if is_collection else None,
+                    "popularity2": popularity_input * 0.8,
+                    "rating": 6.5,
+                    "theatrical": 10 if has_major_studio else 2,
+                    "theatrical_limited": 0,
+                    "release_year": release_year,
+                    "revenue": 0,
+                }])
+
+                pred = bp_loaded.predict(custom_row)[0]
+                roi = (pred - budget_input) / budget_input * 100 if budget_input > 0 else 0
+
+                st.markdown("#### 🎬 Prediction Result")
+                rc1, rc2, rc3 = st.columns(3)
+                rc1.metric("Budget", f"${budget_input/1e6:,.1f} M")
+                rc2.metric("Predicted Revenue", f"${pred/1e6:,.1f} M")
+                rc3.metric("Predicted ROI", f"{roi:.0f}%")
+
+                # Verdict
+                if roi > 100:
+                    st.success(f"🎉 **Blockbuster potential!** Predicted {roi:.0f}% ROI")
+                elif roi > 0:
+                    st.info(f"✅ **Profitable.** Predicted {roi:.0f}% ROI")
+                else:
+                    st.warning(f"⚠️ **Risk of loss.** Predicted {roi:.0f}% ROI")
+
+            except Exception as e:
+                st.error(f"Prediction failed: {e}")
+                import traceback
+                st.code(traceback.format_exc())
 
 
 def render_compare_page(movies_df, recommender, preprocessor, settings):

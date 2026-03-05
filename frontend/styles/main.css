@@ -63,10 +63,9 @@ span[style*="text-transform:uppercase"]:hover {
     padding-top: 1rem;
 }
 
-/* ── Plotly charts — dark background ── */
-.js-plotly-plot .main-svg {
-    background: var(--bg-card) !important;
-    border-radius: var(--radius-lg);
+/* ── Plotly charts ── */
+[data-testid="stPlotlyChart"] > div {
+    min-height: 350px !important;
 }
 
 /* ── Spinner ── */

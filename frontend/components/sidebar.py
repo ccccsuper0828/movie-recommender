@@ -1,6 +1,7 @@
 """
 Sidebar component for settings and navigation.
 """
+# @author 成员 F — 前端框架 & API & 测试
 
 import streamlit as st
 from typing import Dict, Tuple, Optional
