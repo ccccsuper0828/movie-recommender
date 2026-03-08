@@ -3,7 +3,10 @@ Hybrid recommendation combining multiple methods.
 """
 # @author 成员 C — 进阶推荐算法 & 推荐页面
 
-from typing import Optional, List, Dict, Tuple, Any
+from typing import Optional, List, Dict, Tuple, Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.evaluation import RecommenderEvaluator
 import pandas as pd
 import numpy as np
 import logging
@@ -25,7 +28,7 @@ class HybridRecommender(BaseRecommender):
 
     def __init__(
         self,
-        weights: Tuple[float, float, float] = (0.3, 0.4, 0.3),
+        weights: Tuple[float, float, float] = (0.1, 0.1, 0.8),  # Favor CF based on performance
         content_params: Optional[Dict] = None,
         metadata_params: Optional[Dict] = None,
         cf_params: Optional[Dict] = None
@@ -100,27 +103,35 @@ class HybridRecommender(BaseRecommender):
         return self
 
     def _compute_hybrid_similarity(self):
-        """Compute the weighted hybrid similarity matrix."""
+        """Compute the weighted hybrid similarity matrix with normalization."""
         logger.info("Computing hybrid similarity matrix...")
 
         n_movies = len(self._movies_df)
         self._similarity_matrix = np.zeros((n_movies, n_movies))
 
-        # Add weighted components
+        def _normalize_similarity(sim_matrix: np.ndarray) -> np.ndarray:
+            """Normalize similarity matrix to [0, 1] range."""
+            sim_min, sim_max = sim_matrix.min(), sim_matrix.max()
+            if sim_max > sim_min:
+                return (sim_matrix - sim_min) / (sim_max - sim_min)
+            else:
+                return sim_matrix
+
+        # Add weighted components with normalization
         if self._content_recommender.similarity_matrix is not None:
-            self._similarity_matrix += (
-                self.weights[0] * self._content_recommender.similarity_matrix
-            )
+            content_sim = self._content_recommender.similarity_matrix
+            content_sim_norm = _normalize_similarity(content_sim)
+            self._similarity_matrix += self.weights[0] * content_sim_norm
 
         if self._metadata_recommender.similarity_matrix is not None:
-            self._similarity_matrix += (
-                self.weights[1] * self._metadata_recommender.similarity_matrix
-            )
+            metadata_sim = self._metadata_recommender.similarity_matrix
+            metadata_sim_norm = _normalize_similarity(metadata_sim)
+            self._similarity_matrix += self.weights[1] * metadata_sim_norm
 
         if self._cf_recommender.similarity_matrix is not None:
-            self._similarity_matrix += (
-                self.weights[2] * self._cf_recommender.similarity_matrix
-            )
+            cf_sim = self._cf_recommender.similarity_matrix
+            cf_sim_norm = _normalize_similarity(cf_sim)
+            self._similarity_matrix += self.weights[2] * cf_sim_norm
 
     def recommend(
         self,
@@ -324,6 +335,64 @@ class HybridRecommender(BaseRecommender):
 
         logger.info(f"Updated weights: Content={self.weights[0]:.2f}, "
                     f"Metadata={self.weights[1]:.2f}, CF={self.weights[2]:.2f}")
+
+    def optimize_weights_from_evaluation(
+        self,
+        evaluator,
+        k: int = 10
+    ) -> Tuple[float, float, float]:
+        """
+        Optimize weights based on evaluation results.
+
+        Parameters
+        ----------
+        evaluator : RecommenderEvaluator
+            Evaluator instance
+        k : int
+            Top-K for evaluation
+
+        Returns
+        -------
+        tuple
+            Optimized weights (content, metadata, cf)
+        """
+        logger.info("Optimizing weights based on evaluation results...")
+
+        # Evaluate each method
+        content_results = evaluator.evaluate(
+            self._content_recommender.similarity_matrix,
+            "Content-Based",
+            k=k
+        )
+        metadata_results = evaluator.evaluate(
+            self._metadata_recommender.similarity_matrix,
+            "Metadata-Based",
+            k=k
+        )
+        cf_results = evaluator.evaluate(
+            self._cf_recommender.similarity_matrix,
+            "Collaborative",
+            k=k
+        )
+
+        # Use NDCG as the performance metric
+        content_ndcg = content_results.get('ndcg@k', 0.0)
+        metadata_ndcg = metadata_results.get('ndcg@k', 0.0)
+        cf_ndcg = cf_results.get('ndcg@k', 0.0)
+
+        logger.info(f"Method performance - Content: {content_ndcg:.4f}, "
+                    f"Metadata: {metadata_ndcg:.4f}, CF: {cf_ndcg:.4f}")
+
+        # Softmax-like weighting (avoid zero weights)
+        scores = np.array([content_ndcg, metadata_ndcg, cf_ndcg])
+        scores = np.maximum(scores, 0.01)  # Minimum weight to avoid zero
+        weights = scores / scores.sum()
+
+        self.set_weights(weights[0], weights[1], weights[2])
+        logger.info(f"Optimized weights: Content={weights[0]:.3f}, "
+                    f"Metadata={weights[1]:.3f}, CF={weights[2]:.3f}")
+
+        return tuple(weights)
 
     @property
     def content_recommender(self) -> ContentBasedRecommender:

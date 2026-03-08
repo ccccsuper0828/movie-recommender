@@ -27,10 +27,10 @@ class MetadataBasedRecommender(BaseRecommender):
     def __init__(
         self,
         max_features: int = 10000,
-        genre_weight: int = 3,
-        director_weight: int = 3,
-        cast_weight: int = 2,
-        keyword_weight: int = 1
+        genre_weight: int = 5,  # Increased from 3
+        director_weight: int = 4,  # Increased from 3
+        cast_weight: int = 3,  # Increased from 2
+        keyword_weight: int = 2  # Increased from 1
     ):
         """
         Initialize the metadata-based recommender.

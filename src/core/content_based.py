@@ -26,9 +26,11 @@ class ContentBasedRecommender(BaseRecommender):
 
     def __init__(
         self,
-        max_features: int = 5000,
-        ngram_range: Tuple[int, int] = (1, 2),
-        stop_words: str = 'english'
+        max_features: int = 10000,  # Increased from 5000
+        ngram_range: Tuple[int, int] = (1, 3),  # Increased from (1, 2)
+        stop_words: str = 'english',
+        min_df: int = 2,  # Minimum document frequency
+        max_df: float = 0.95  # Maximum document frequency
     ):
         """
         Initialize the content-based recommender.
@@ -48,6 +50,8 @@ class ContentBasedRecommender(BaseRecommender):
         self.max_features = max_features or settings.tfidf_max_features
         self.ngram_range = ngram_range or settings.tfidf_ngram_range
         self.stop_words = stop_words
+        self.min_df = min_df
+        self.max_df = max_df
 
         self._tfidf_vectorizer: Optional[TfidfVectorizer] = None
         self._tfidf_matrix = None
@@ -83,7 +87,9 @@ class ContentBasedRecommender(BaseRecommender):
         self._tfidf_vectorizer = TfidfVectorizer(
             stop_words=self.stop_words,
             max_features=self.max_features,
-            ngram_range=self.ngram_range
+            ngram_range=self.ngram_range,
+            min_df=self.min_df,
+            max_df=self.max_df
         )
 
         # Fit and transform
