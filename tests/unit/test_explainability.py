@@ -44,7 +44,7 @@ class TestRuleBasedExplainer:
 
 class TestSHAPExplainer:
     def test_shap_import_guard(self):
-        from src.explainability import SHAPExplainer
+            from src.explainability import SHAPExplainer
 
         # SHAP is optional in this project runtime.
         assert SHAPExplainer is None or SHAPExplainer is not None

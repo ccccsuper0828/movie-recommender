@@ -56,7 +56,7 @@ def inject_custom_css():
     dynamic = f"""<style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
 
-{css}
+    {css}
 
 /* ── Global reset ── */
 html, body, .stApp {{
@@ -86,13 +86,13 @@ p, li, span, label {{ color: {COLORS['text_secondary']}; }}
 }}
 [data-testid="stSidebar"] * {{
     color: {COLORS['text_primary']} !important;
-}}
+    }}
 [data-testid="stSidebar"] .stSlider > div > div > div {{
     background-color: {COLORS['accent_red']} !important;
 }}
 
 /* ── Buttons ── */
-.stButton > button {{
+    .stButton > button {{
     background: linear-gradient(135deg, {COLORS['accent_red']}, {COLORS['accent_red_dark']}) !important;
     color: #fff !important;
     border: none !important;
@@ -102,11 +102,11 @@ p, li, span, label {{ color: {COLORS['text_secondary']}; }}
     font-size: 0.9rem !important;
     transition: all 0.25s ease !important;
     box-shadow: 0 2px 8px rgba(229,56,59,0.25) !important;
-}}
-.stButton > button:hover {{
+    }}
+    .stButton > button:hover {{
     transform: translateY(-1px) !important;
     box-shadow: 0 4px 16px rgba(229,56,59,0.4) !important;
-}}
+    }}
 
 /* ── Inputs ── */
 .stTextInput > div > div > input,
@@ -117,42 +117,42 @@ p, li, span, label {{ color: {COLORS['text_secondary']}; }}
     border: 1px solid {COLORS['border']} !important;
     border-radius: 10px !important;
     font-size: 0.95rem !important;
-}}
-.stTextInput > div > div > input:focus {{
+    }}
+    .stTextInput > div > div > input:focus {{
     border-color: {COLORS['accent_red']} !important;
     box-shadow: 0 0 0 3px rgba(229,56,59,0.15) !important;
-}}
+    }}
 
 /* ── Tabs ── */
-.stTabs [data-baseweb="tab-list"] {{
+    .stTabs [data-baseweb="tab-list"] {{
     gap: 4px;
     background: {COLORS['bg_secondary']};
     padding: 6px;
-    border-radius: 12px;
+        border-radius: 12px;
     border: 1px solid {COLORS['border']};
-}}
-.stTabs [data-baseweb="tab"] {{
+    }}
+    .stTabs [data-baseweb="tab"] {{
     background: transparent;
-    border-radius: 8px;
-    color: {COLORS['text_secondary']};
+        border-radius: 8px;
+        color: {COLORS['text_secondary']};
     padding: 8px 18px;
     font-weight: 500;
     font-size: 0.85rem;
     border: none;
-}}
-.stTabs [aria-selected="true"] {{
+    }}
+    .stTabs [aria-selected="true"] {{
     background: {COLORS['accent_red']} !important;
     color: #fff !important;
     font-weight: 600;
-}}
+    }}
 
 /* ── Metrics ── */
 [data-testid="stMetric"] {{
     background: {COLORS['bg_card']};
     padding: 1rem 1.2rem;
-    border-radius: 12px;
-    border: 1px solid {COLORS['border']};
-}}
+        border-radius: 12px;
+        border: 1px solid {COLORS['border']};
+    }}
 [data-testid="stMetricValue"] {{
     color: {COLORS['accent_gold']} !important;
     font-family: 'Space Grotesk', sans-serif !important;
@@ -163,10 +163,10 @@ p, li, span, label {{ color: {COLORS['text_secondary']}; }}
     font-size: 0.8rem !important;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-}}
+    }}
 
 /* ── Expander ── */
-.stExpander {{
+    .stExpander {{
     background: {COLORS['bg_card']} !important;
     border: 1px solid {COLORS['border']} !important;
     border-radius: 12px !important;
@@ -180,13 +180,13 @@ p, li, span, label {{ color: {COLORS['text_secondary']}; }}
 .stDataFrame, [data-testid="stDataFrame"] {{
     border-radius: 12px;
     overflow: hidden;
-    border: 1px solid {COLORS['border']};
+        border: 1px solid {COLORS['border']};
 }}
 
 /* ── Radio buttons (sidebar nav) ── */
 .stRadio > div {{
     gap: 4px !important;
-}}
+    }}
 .stRadio > div > label {{
     background: transparent !important;
     border: 1px solid transparent !important;
@@ -210,26 +210,26 @@ p, li, span, label {{ color: {COLORS['text_secondary']}; }}
 /* ── Slider ── */
 .stSlider > div > div > div > div {{
     background-color: {COLORS['accent_red']} !important;
-}}
+    }}
 .stSlider [data-testid="stTickBarMin"],
 .stSlider [data-testid="stTickBarMax"] {{
     color: {COLORS['text_muted']} !important;
-}}
+    }}
 
 /* ── Markdown text ── */
 .stMarkdown, .stMarkdown p {{
-    color: {COLORS['text_primary']};
+        color: {COLORS['text_primary']};
     line-height: 1.65;
 }}
 .stCaption, .stMarkdown .caption {{
     color: {COLORS['text_muted']} !important;
-}}
+    }}
 
 /* ── Dividers ── */
-hr {{
+    hr {{
     border-color: {COLORS['border']} !important;
     opacity: 0.5;
-}}
+    }}
 
 /* ── Scrollbar ── */
 ::-webkit-scrollbar {{ width: 8px; height: 8px; }}
