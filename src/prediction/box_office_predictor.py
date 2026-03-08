@@ -112,6 +112,8 @@ class BoxOfficePredictor:
         self.xgb_models: List = []
         self.cat_models: List = []
         self.label_encoders: Dict[str, LabelEncoder] = {}
+        self.target_encoders: Dict[str, Dict[str, float]] = {}  # Store target encoding mappings
+        self.global_mean: float = 16.0  # Mean of log1p(revenue) for target encoding
         self.FEATURE_COLS: List[str] = []
         self._is_fitted = False
         self.cv_results: Optional[Dict[str, Any]] = None
@@ -318,32 +320,38 @@ class BoxOfficePredictor:
         y = np.log1p(train["revenue"].values.astype(float))
 
         # ── CV-safe target encodings (director, company, genre combo, language) ──
-        global_mean = y.mean()
+        self.global_mean = y.mean()
 
         def _cv_target_encode(col_series, smoothing=10):
-            enc = np.full(len(train), global_mean)
+            enc = np.full(len(train), self.global_mean)
             kf_te = KFold(n_splits=5, shuffle=True, random_state=42)
+            # Build mapping from all training data for prediction use
+            all_means = pd.Series(y).groupby(col_series).mean()
+            all_counts = col_series.groupby(col_series).size()
+            all_smooth = (all_counts * all_means + smoothing * self.global_mean) / (all_counts + smoothing)
+            mapping = all_smooth.to_dict()
+            
             for tr_i, va_i in kf_te.split(train):
                 means = pd.Series(y[tr_i]).groupby(col_series.iloc[tr_i]).mean()
                 counts = col_series.iloc[tr_i].groupby(col_series.iloc[tr_i]).size()
-                smooth = (counts * means + smoothing * global_mean) / (counts + smoothing)
-                enc[va_i] = col_series.iloc[va_i].map(smooth).fillna(global_mean).values
-            return enc
+                smooth = (counts * means + smoothing * self.global_mean) / (counts + smoothing)
+                enc[va_i] = col_series.iloc[va_i].map(smooth).fillna(self.global_mean).values
+            return enc, mapping
 
         train["_director"] = _get_director(train.get("crew", pd.Series(dtype=str)))
-        X["director_te"] = _cv_target_encode(train["_director"], smoothing=10)
+        X["director_te"], self.target_encoders["director"] = _cv_target_encode(train["_director"], smoothing=10)
 
         def _main_company(x):
             items = _safe_eval(x)
             return items[0].get("name", "unknown") if items and isinstance(items[0], dict) else "unknown"
         train["_company"] = train["production_companies"].apply(_main_company)
-        X["company_te"] = _cv_target_encode(train["_company"], smoothing=20)
+        X["company_te"], self.target_encoders["company"] = _cv_target_encode(train["_company"], smoothing=20)
 
         train["_genre_combo"] = train["genres"].apply(
             lambda x: "|".join(sorted([g.get("name","") for g in _safe_eval(x) if isinstance(g,dict)][:3]))
         )
-        X["genre_combo_te"] = _cv_target_encode(train["_genre_combo"], smoothing=15)
-        X["lang_te"] = _cv_target_encode(train["original_language"].fillna("en"), smoothing=20)
+        X["genre_combo_te"], self.target_encoders["genre_combo"] = _cv_target_encode(train["_genre_combo"], smoothing=15)
+        X["lang_te"], self.target_encoders["lang"] = _cv_target_encode(train["original_language"].fillna("en"), smoothing=20)
 
         # Polynomial features
         X["budget_sq"] = X["budget_log"] ** 2
@@ -515,11 +523,32 @@ class BoxOfficePredictor:
         # Restore training feature list (was overwritten by _build_features)
         self.FEATURE_COLS = training_cols
 
+        # Calculate target encodings using saved mappings
+        if "director_te" in training_cols and "director" in self.target_encoders:
+            directors = _get_director(df.get("crew", pd.Series(dtype=str, index=df.index)))
+            X["director_te"] = directors.map(self.target_encoders["director"]).fillna(self.global_mean)
+
+        if "company_te" in training_cols and "company" in self.target_encoders:
+            def _main_company(x):
+                items = _safe_eval(x)
+                return items[0].get("name", "unknown") if items and isinstance(items[0], dict) else "unknown"
+            companies = df["production_companies"].apply(_main_company) if "production_companies" in df.columns else pd.Series("unknown", index=df.index)
+            X["company_te"] = companies.map(self.target_encoders["company"]).fillna(self.global_mean)
+
+        if "genre_combo_te" in training_cols and "genre_combo" in self.target_encoders:
+            genre_combos = df["genres"].apply(
+                lambda x: "|".join(sorted([g.get("name","") for g in _safe_eval(x) if isinstance(g,dict)][:3]))
+            ) if "genres" in df.columns else pd.Series("", index=df.index)
+            X["genre_combo_te"] = genre_combos.map(self.target_encoders["genre_combo"]).fillna(self.global_mean)
+
+        if "lang_te" in training_cols and "lang" in self.target_encoders:
+            languages = df["original_language"].fillna("en") if "original_language" in df.columns else pd.Series("en", index=df.index)
+            X["lang_te"] = languages.map(self.target_encoders["lang"]).fillna(self.global_mean)
+
         # Add missing columns with safe defaults
-        global_mean = 16.0  # approx mean of log1p(revenue)
         for col in training_cols:
             if col not in X.columns:
-                X[col] = global_mean if col.endswith("_te") else 0.0
+                X[col] = self.global_mean if col.endswith("_te") else 0.0
 
         # Ensure column order matches training exactly
         X = X.reindex(columns=training_cols, fill_value=0.0)
@@ -588,6 +617,8 @@ class BoxOfficePredictor:
                 "xgb_models": self.xgb_models,
                 "cat_models": self.cat_models,
                 "label_encoders": self.label_encoders,
+                "target_encoders": self.target_encoders,
+                "global_mean": self.global_mean,
                 "FEATURE_COLS": self.FEATURE_COLS,
                 "cv_results": self.cv_results,
                 "fold_results": self.fold_results,
@@ -610,6 +641,8 @@ class BoxOfficePredictor:
         bp.xgb_models = data["xgb_models"]
         bp.cat_models = data["cat_models"]
         bp.label_encoders = data["label_encoders"]
+        bp.target_encoders = data.get("target_encoders", {})  # Backward compatibility
+        bp.global_mean = data.get("global_mean", 16.0)  # Backward compatibility
         bp.FEATURE_COLS = data["FEATURE_COLS"]
         bp.cv_results = data["cv_results"]
         bp.fold_results = data["fold_results"]
