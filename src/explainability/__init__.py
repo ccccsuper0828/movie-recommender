@@ -2,16 +2,15 @@
 
 from .rule_based import RuleBasedExplainer
 
-# SHAP/visualization may be unavailable in some environments. Keep imports optional
-# so core services can still run and tests can exercise non-SHAP functionality.
+# SHAP/visualization may be unavailable in some environments.
 try:
-from .shap_explainer import SHAPExplainer
-except Exception:  # pragma: no cover - environment-dependent optional dependency
+    from .shap_explainer import SHAPExplainer
+except Exception:
     SHAPExplainer = None
 
 try:
-from .visualization import ExplanationVisualizer
-except Exception:  # pragma: no cover - environment-dependent optional dependency
+    from .visualization import ExplanationVisualizer
+except Exception:
     ExplanationVisualizer = None
 
 __all__ = [
