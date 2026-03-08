@@ -40,11 +40,9 @@ COPY --chown=appuser:appuser frontend/ ./frontend/
 COPY --chown=appuser:appuser analytics/ ./analytics/
 
 # Copy ALL data (including MovieLens + Kaggle)
-RUN mkdir -p data/raw/kaggle_bo data/processed data/cache
-COPY --chown=appuser:appuser data/raw/ ./data/raw/
-
-# Copy ALL data (including MovieLens + Kaggle)
-RUN mkdir -p data/raw/kaggle_bo data/processed data/cache
+# Create data directories with write permissions for appuser
+RUN mkdir -p data/raw/kaggle_bo data/processed data/cache && \
+    chown -R appuser:appuser data/processed data/cache
 COPY --chown=appuser:appuser data/raw/ ./data/raw/
 
 # Create catboost_info directory with write permissions for CatBoost training
@@ -58,16 +56,6 @@ ENV PYTHONUNBUFFERED=1 \
     ENVIRONMENT=production \
     STREAMLIT_SERVER_PORT=${PORT:-8501} \
     CATBOOST_TRAIN_DIR=/app/catboost_info
-
-
-
-USER appuser
-
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONPATH=/app \
-    ENVIRONMENT=production \
-    STREAMLIT_SERVER_PORT=${PORT:-8501}
 
 EXPOSE 8000 8501
 
