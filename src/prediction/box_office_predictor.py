@@ -506,16 +506,23 @@ class BoxOfficePredictor:
     def predict(self, df: pd.DataFrame) -> np.ndarray:
         if not self._is_fitted:
             raise RuntimeError("Call fit() first.")
+
+        # Save training feature list before _build_features overwrites it
+        training_cols = list(self.FEATURE_COLS)
+
         X = self._build_features(df)
 
-        # Add target-encoding columns with global mean (safe default for unseen data)
+        # Restore training feature list (was overwritten by _build_features)
+        self.FEATURE_COLS = training_cols
+
+        # Add missing columns with safe defaults
         global_mean = 16.0  # approx mean of log1p(revenue)
-        for col in self.FEATURE_COLS:
+        for col in training_cols:
             if col not in X.columns:
                 X[col] = global_mean if col.endswith("_te") else 0.0
 
-        # Ensure column order matches training
-        X = X.reindex(columns=self.FEATURE_COLS, fill_value=0.0)
+        # Ensure column order matches training exactly
+        X = X.reindex(columns=training_cols, fill_value=0.0)
 
         parts, weights = [], []
         if self.lgb_models:
