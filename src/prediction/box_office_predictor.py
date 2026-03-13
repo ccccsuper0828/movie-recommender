@@ -263,12 +263,15 @@ class BoxOfficePredictor:
             f["has_director"] = _get_director(df["crew"]).apply(lambda x: int(bool(x)))
 
         # Text lengths
-        f["overview_len"] = df["overview"].fillna("").apply(len)
+        overview = df["overview"].fillna("")
+        f["overview_len"] = overview.apply(len)
+        f["overview_wc"] = overview.apply(lambda x: len(x.split()))
         f["title_len"] = df["title"].fillna("").apply(len)
         if "homepage" in df.columns:
             f["has_homepage"] = df["homepage"].notna().astype(int)
         if "tagline" in df.columns:
             f["has_tagline"] = df["tagline"].notna().astype(int)
+            f["tagline_len"] = df["tagline"].fillna("").apply(len)
 
         # Country release counts
         country_cols = [c for c in df.columns if len(c) == 2 and c.isupper() and c not in ("id",)]
@@ -290,6 +293,14 @@ class BoxOfficePredictor:
         if "n_release_countries" in f.columns:
             f["budget_x_countries"] = f["budget_log"] * np.log1p(f["n_release_countries"])
         f["runtime_x_budget"] = f["runtime"] * f["budget_log"]
+
+        # More interactions
+        f["pop_x_runtime"] = f["popularity_log"] * f["runtime"]
+        f["genres_x_budget"] = f["n_genres"] * f["budget_log"]
+        if "n_cast" in f.columns:
+            f["cast_x_budget"] = f["n_cast"] * f["budget_log"]
+        if "n_companies" in f.columns:
+            f["companies_x_budget"] = f["n_companies"] * f["budget_log"]
 
         # Budget percentile within year
         f["budget_year_pct"] = 0.0
@@ -358,6 +369,12 @@ class BoxOfficePredictor:
         if "popularity2_log" in X.columns:
             X["pop2_sq"] = X["popularity2_log"] ** 2
 
+        # Save per-year budget distributions for single-row prediction
+        self.year_budgets = {}
+        for yr in X["release_year"].unique():
+            mask = X["release_year"] == yr
+            self.year_budgets[int(yr)] = np.sort(X.loc[mask, "budget"].values)
+
         # Remove extreme outliers (top/bottom 0.5%)
         cap = np.percentile(y, 99.5)
         floor = np.percentile(y, 0.5)
@@ -381,27 +398,27 @@ class BoxOfficePredictor:
             ytr, yva = y[tr], y[va]
             fold_info = {"fold": fold + 1}
 
-            # ── LightGBM (balanced regularisation) ──
+            # ── LightGBM ──
             if LGB_OK:
                 dt = lgb.Dataset(Xtr, label=ytr)
                 dv = lgb.Dataset(Xva, label=yva, reference=dt)
                 evals_result = {}
                 m = lgb.train(
                     {"objective": "regression", "metric": "rmse",
-                     "learning_rate": 0.03,
-                     "num_leaves": 20,
-                     "max_depth": 5,
-                     "min_child_samples": 60,
-                     "feature_fraction": 0.5,
-                     "bagging_fraction": 0.6,
+                     "learning_rate": 0.01,
+                     "num_leaves": 31,
+                     "max_depth": 6,
+                     "min_child_samples": 30,
+                     "feature_fraction": 0.6,
+                     "bagging_fraction": 0.7,
                      "bagging_freq": 3,
-                     "reg_alpha": 2.0,
-                     "reg_lambda": 8.0,
-                     "min_gain_to_split": 0.3,
-                     "path_smooth": 5.0,
+                     "reg_alpha": 1.0,
+                     "reg_lambda": 5.0,
+                     "min_gain_to_split": 0.1,
+                     "path_smooth": 2.0,
                      "verbose": -1,
                      "seed": self.seed},
-                    dt, 3000, valid_sets=[dt, dv], valid_names=["train", "val"],
+                    dt, 5000, valid_sets=[dt, dv], valid_names=["train", "val"],
                     callbacks=[
                         lgb.early_stopping(100),
                         lgb.log_evaluation(0),
@@ -415,24 +432,24 @@ class BoxOfficePredictor:
                 fold_info["lgb_train_curve"] = evals_result.get("train", {}).get("rmse", [])
                 fold_info["lgb_val_curve"] = evals_result.get("val", {}).get("rmse", [])
 
-            # ── XGBoost (balanced regularisation) ──
+            # ── XGBoost ──
             if XGB_OK:
                 dtx = xgb.DMatrix(Xtr, label=ytr)
                 dvx = xgb.DMatrix(Xva, label=yva)
                 xgb_evals = {}
                 m = xgb.train(
                     {"objective": "reg:squarederror", "eval_metric": "rmse",
-                     "learning_rate": 0.03,
-                     "max_depth": 4,
-                     "min_child_weight": 30,
-                     "subsample": 0.6,
-                     "colsample_bytree": 0.5,
-                     "reg_alpha": 2.0,
-                     "reg_lambda": 8.0,
-                     "gamma": 0.5,
+                     "learning_rate": 0.01,
+                     "max_depth": 5,
+                     "min_child_weight": 20,
+                     "subsample": 0.7,
+                     "colsample_bytree": 0.6,
+                     "reg_alpha": 1.0,
+                     "reg_lambda": 5.0,
+                     "gamma": 0.3,
                      "seed": self.seed},
-                    dtx, 3000, evals=[(dtx, "train"), (dvx, "val")],
-                    early_stopping_rounds=100, verbose_eval=False,
+                    dtx, 5000, evals=[(dtx, "train"), (dvx, "val")],
+                    early_stopping_rounds=150, verbose_eval=False,
                     evals_result=xgb_evals,
                 )
                 self.xgb_models.append(m)
@@ -442,17 +459,17 @@ class BoxOfficePredictor:
                 fold_info["xgb_train_curve"] = xgb_evals["train"]["rmse"]
                 fold_info["xgb_val_curve"] = xgb_evals["val"]["rmse"]
 
-            # ── CatBoost (balanced regularisation) ──
+            # ── CatBoost ──
             if CAT_OK:
                 m = CatBoostRegressor(
-                    iterations=3000, learning_rate=0.03, depth=4,
-                    l2_leaf_reg=15, random_seed=self.seed,
+                    iterations=5000, learning_rate=0.01, depth=5,
+                    l2_leaf_reg=8, random_seed=self.seed,
                     eval_metric="RMSE", verbose=0,
-                    early_stopping_rounds=100,
-                    min_child_samples=40,
-                    subsample=0.6,
-                    colsample_bylevel=0.5,
-                    random_strength=1.5,
+                    early_stopping_rounds=150,
+                    min_child_samples=25,
+                    subsample=0.7,
+                    colsample_bylevel=0.6,
+                    random_strength=1.0,
                 )
                 m.fit(Xtr, ytr, eval_set=(Xva, yva), verbose=0)
                 self.cat_models.append(m)
@@ -545,6 +562,23 @@ class BoxOfficePredictor:
             languages = df["original_language"].fillna("en") if "original_language" in df.columns else pd.Series("en", index=df.index)
             X["lang_te"] = languages.map(self.target_encoders["lang"]).fillna(self.global_mean)
 
+        # Polynomial features (must match what fit() adds after _build_features)
+        if "budget_sq" in training_cols and "budget_log" in X.columns:
+            X["budget_sq"] = X["budget_log"] ** 2
+        if "pop2_sq" in training_cols and "popularity2_log" in X.columns:
+            X["pop2_sq"] = X["popularity2_log"] ** 2
+
+        # Fix budget_year_pct for small-batch prediction using saved distributions
+        if "budget_year_pct" in training_cols and hasattr(self, "year_budgets") and self.year_budgets:
+            for idx in X.index:
+                yr = int(X.loc[idx, "release_year"])
+                budget = X.loc[idx, "budget"]
+                if yr in self.year_budgets:
+                    arr = self.year_budgets[yr]
+                    X.loc[idx, "budget_year_pct"] = np.searchsorted(arr, budget) / len(arr)
+                else:
+                    X.loc[idx, "budget_year_pct"] = 0.5
+
         # Add missing columns with safe defaults
         for col in training_cols:
             if col not in X.columns:
@@ -624,6 +658,7 @@ class BoxOfficePredictor:
                 "fold_results": self.fold_results,
                 "n_folds": self.n_folds,
                 "seed": self.seed,
+                "year_budgets": getattr(self, "year_budgets", {}),
             }, f)
         logger.info(f"Model saved to {save_path}")
         return save_path
@@ -641,8 +676,9 @@ class BoxOfficePredictor:
         bp.xgb_models = data["xgb_models"]
         bp.cat_models = data["cat_models"]
         bp.label_encoders = data["label_encoders"]
-        bp.target_encoders = data.get("target_encoders", {})  # Backward compatibility
-        bp.global_mean = data.get("global_mean", 16.0)  # Backward compatibility
+        bp.target_encoders = data.get("target_encoders", {})
+        bp.global_mean = data.get("global_mean", 16.0)
+        bp.year_budgets = data.get("year_budgets", {})
         bp.FEATURE_COLS = data["FEATURE_COLS"]
         bp.cv_results = data["cv_results"]
         bp.fold_results = data["fold_results"]

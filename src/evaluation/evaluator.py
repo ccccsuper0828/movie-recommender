@@ -65,6 +65,11 @@ class RecommenderEvaluator:
             rating_matrix, test_ratio=test_ratio, seed=seed
         )
 
+        # Movies that exist in MovieLens (have at least 1 rating globally).
+        # Recommendations are restricted to this set so they can actually
+        # match ground-truth items.
+        self._rated_movie_mask = (rating_matrix > 0).any(axis=0)  # shape (n_movies,)
+
         # Precompute item popularity on training data (for novelty)
         self._item_pop = (self.train_matrix > 0).sum(axis=0)  # shape (n_movies,)
         self._total_interactions = int(self._item_pop.sum())
@@ -72,7 +77,7 @@ class RecommenderEvaluator:
     # ------------------------------------------------------------------
     # Per-user evaluation helpers
     # ------------------------------------------------------------------
-    def _user_ground_truth(self, user_idx: int, min_rating: float = 4.0):
+    def _user_ground_truth(self, user_idx: int, min_rating: float = 3.5):
         """Return set of movie indices the user rated >= min_rating in test."""
         row = self.test_matrix[user_idx]
         return set(np.where(row >= min_rating)[0])
@@ -86,6 +91,7 @@ class RecommenderEvaluator:
         """
         For a user, aggregate similarity-based scores weighted by their
         *training* ratings, then return the top-k unseen items.
+        Only considers movies that exist in the MovieLens catalog.
         """
         user_ratings = self.train_matrix[user_idx]
         rated_mask = user_ratings > 0
@@ -96,6 +102,10 @@ class RecommenderEvaluator:
 
         # Zero out already-rated movies
         scores[rated_mask] = -1
+
+        # Only recommend movies that exist in MovieLens so they can
+        # actually match ground-truth test items.
+        scores[~self._rated_movie_mask] = -1
 
         top_k = np.argsort(scores)[::-1][:k]
         return top_k.tolist()

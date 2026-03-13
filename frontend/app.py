@@ -932,17 +932,23 @@ def render_box_office_page(movies_df):
             valid_movies = kaggle_train[kaggle_train["budget"] > 0].nlargest(200, "popularity")
             selected = st.selectbox("Select movie", options=valid_movies["title"].tolist(), key="bo_sel")
             if selected and st.button("Predict", key="bo_pred_sel"):
+                import math
                 row = kaggle_train[kaggle_train["title"] == selected].head(1)
                 pred = bp_loaded.predict(row)[0]
                 actual = float(row["revenue"].iloc[0])
                 budget = float(row["budget"].iloc[0])
-                c1, c2, c3 = st.columns(3)
+                c1, c2, c3, c4 = st.columns(4)
                 c1.metric("Budget", f"${budget/1e6:,.1f} M")
                 c2.metric("Predicted Revenue", f"${pred/1e6:,.1f} M")
                 c3.metric("Actual Revenue", f"${actual/1e6:,.1f} M" if actual > 0 else "N/A")
                 if actual > 0:
-                    err = abs(pred - actual) / actual * 100
-                    st.caption(f"Prediction error: {err:.1f}%")
+                    log_err = abs(math.log1p(pred) - math.log1p(actual))
+                    ratio = pred / actual
+                    c4.metric("Pred / Actual", f"{ratio:.2f}x")
+                    st.caption(
+                        f"Log-scale error (RMSLE): {log_err:.2f} — "
+                        f"CV average RMSLE across all movies: {bp_loaded.cv_results.get('rmsle', 1.79):.2f}"
+                    )
         except Exception:
             st.info("Train the model first by clicking the button above.")
 

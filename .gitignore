@@ -40,3 +40,9 @@ archive/
 # data/raw/kaggle_bo/*.csv
 archive/
 anaconda_projects/
+
+# Notebook-generated outputs
+tmdb_5000_processed.csv
+
+# Non-essential / do not upload
+_no_upload/
