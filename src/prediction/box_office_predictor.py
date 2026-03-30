@@ -314,6 +314,32 @@ class BoxOfficePredictor:
             f["popularity"] > 0, f["budget_log"] / np.log1p(f["popularity"]), 0
         )
 
+        # Additional features for better generalization
+        f["budget_pct_rank"] = f["budget"].rank(pct=True)
+        f["pop_pct_rank"] = f["popularity"].rank(pct=True)
+        f["runtime_log"] = np.log1p(f["runtime"])
+        f["runtime_sq"] = f["runtime"] ** 2
+
+        if "in_collection" in f.columns:
+            f["collection_x_budget"] = f["in_collection"] * f["budget_log"]
+            f["collection_x_pop"] = f["in_collection"] * f["popularity_log"]
+
+        if "n_cast" in f.columns:
+            f["cast_per_budget"] = np.where(
+                f["budget_log"] > 0, f["n_cast"] / (f["budget_log"] + 1), 0
+            )
+
+        f["is_spring"] = f["release_month"].isin([3, 4]).astype(int)
+        f["is_fall"] = f["release_month"].isin([9, 10]).astype(int)
+        f["season_x_budget"] = (f["is_summer"] + f["is_holiday"]) * f["budget_log"]
+
+        if "overview_wc" in f.columns:
+            f["overview_wc_log"] = np.log1p(f["overview_wc"])
+
+        if "has_homepage" in f.columns and "has_tagline" in f.columns:
+            f["marketing_score"] = f["has_homepage"] + f["has_tagline"]
+            f["marketing_x_budget"] = f["marketing_score"] * f["budget_log"]
+
         self.FEATURE_COLS = list(f.columns)
         return f
 
@@ -405,22 +431,24 @@ class BoxOfficePredictor:
                 evals_result = {}
                 m = lgb.train(
                     {"objective": "regression", "metric": "rmse",
-                     "learning_rate": 0.01,
-                     "num_leaves": 31,
-                     "max_depth": 6,
-                     "min_child_samples": 30,
-                     "feature_fraction": 0.6,
-                     "bagging_fraction": 0.7,
-                     "bagging_freq": 3,
-                     "reg_alpha": 1.0,
-                     "reg_lambda": 5.0,
-                     "min_gain_to_split": 0.1,
-                     "path_smooth": 2.0,
+                     "learning_rate": 0.008,
+                     "num_leaves": 18,
+                     "max_depth": 4,
+                     "min_child_samples": 60,
+                     "feature_fraction": 0.45,
+                     "bagging_fraction": 0.6,
+                     "bagging_freq": 5,
+                     "reg_alpha": 5.0,
+                     "reg_lambda": 15.0,
+                     "min_gain_to_split": 0.5,
+                     "path_smooth": 10.0,
+                     "max_bin": 200,
+                     "extra_trees": True,
                      "verbose": -1,
                      "seed": self.seed},
-                    dt, 5000, valid_sets=[dt, dv], valid_names=["train", "val"],
+                    dt, 8000, valid_sets=[dt, dv], valid_names=["train", "val"],
                     callbacks=[
-                        lgb.early_stopping(100),
+                        lgb.early_stopping(250),
                         lgb.log_evaluation(0),
                         lgb.record_evaluation(evals_result),
                     ],
@@ -439,17 +467,18 @@ class BoxOfficePredictor:
                 xgb_evals = {}
                 m = xgb.train(
                     {"objective": "reg:squarederror", "eval_metric": "rmse",
-                     "learning_rate": 0.01,
-                     "max_depth": 5,
-                     "min_child_weight": 20,
-                     "subsample": 0.7,
-                     "colsample_bytree": 0.6,
-                     "reg_alpha": 1.0,
-                     "reg_lambda": 5.0,
-                     "gamma": 0.3,
+                     "learning_rate": 0.008,
+                     "max_depth": 4,
+                     "min_child_weight": 60,
+                     "subsample": 0.55,
+                     "colsample_bytree": 0.45,
+                     "reg_alpha": 5.0,
+                     "reg_lambda": 15.0,
+                     "gamma": 1.5,
+                     "max_bin": 200,
                      "seed": self.seed},
-                    dtx, 5000, evals=[(dtx, "train"), (dvx, "val")],
-                    early_stopping_rounds=150, verbose_eval=False,
+                    dtx, 8000, evals=[(dtx, "train"), (dvx, "val")],
+                    early_stopping_rounds=250, verbose_eval=False,
                     evals_result=xgb_evals,
                 )
                 self.xgb_models.append(m)
@@ -462,14 +491,16 @@ class BoxOfficePredictor:
             # ── CatBoost ──
             if CAT_OK:
                 m = CatBoostRegressor(
-                    iterations=5000, learning_rate=0.01, depth=5,
-                    l2_leaf_reg=8, random_seed=self.seed,
+                    iterations=8000, learning_rate=0.008, depth=4,
+                    l2_leaf_reg=25, random_seed=self.seed,
                     eval_metric="RMSE", verbose=0,
-                    early_stopping_rounds=150,
-                    min_child_samples=25,
-                    subsample=0.7,
-                    colsample_bylevel=0.6,
-                    random_strength=1.0,
+                    early_stopping_rounds=250,
+                    min_child_samples=60,
+                    subsample=0.55,
+                    colsample_bylevel=0.45,
+                    random_strength=3.0,
+                    model_size_reg=1.0,
+                    leaf_estimation_iterations=10,
                 )
                 m.fit(Xtr, ytr, eval_set=(Xva, yva), verbose=0)
                 self.cat_models.append(m)
@@ -487,20 +518,37 @@ class BoxOfficePredictor:
             self.fold_results.append(fold_info)
             logger.info(f"  Fold {fold+1}/{self.n_folds} done")
 
-        # ── Optimised weighted ensemble (CatBoost-heavy based on CV) ──
-        parts, weights = [], []
+        # ── Optimised weighted ensemble via scipy minimization ──
+        parts = []
+        part_names = []
         if LGB_OK and self.lgb_models:
-            parts.append(oof_lgb); weights.append(0.25)
+            parts.append(oof_lgb); part_names.append("LGB")
         if XGB_OK and self.xgb_models:
-            parts.append(oof_xgb); weights.append(0.20)
+            parts.append(oof_xgb); part_names.append("XGB")
         if CAT_OK and self.cat_models:
-            parts.append(oof_cat); weights.append(0.55)
+            parts.append(oof_cat); part_names.append("CAT")
 
         if not parts:
             raise RuntimeError("No model available. Install lightgbm / xgboost / catboost.")
 
-        wsum = sum(weights)
-        oof = sum(w / wsum * p for w, p in zip(weights, parts))
+        from scipy.optimize import minimize
+        preds_stack = np.column_stack(parts)
+
+        def _obj(w):
+            w = np.abs(w) / np.abs(w).sum()
+            blended = preds_stack.dot(w)
+            return float(np.sqrt(mean_squared_error(y, blended)))
+
+        n_models = len(parts)
+        w0 = np.ones(n_models) / n_models
+        res = minimize(_obj, w0, method="Nelder-Mead",
+                       options={"maxiter": 5000, "xatol": 1e-8, "fatol": 1e-8})
+        weights = np.abs(res.x) / np.abs(res.x).sum()
+        logger.info(f"Optimised weights: {dict(zip(part_names, [f'{w:.4f}' for w in weights]))}")
+
+        oof = preds_stack.dot(weights)
+
+        self.ensemble_weights = weights.tolist()
 
         rmsle = _rmse(y, oof)  # RMSLE since y = log1p(revenue)
         y_real = np.expm1(y)
@@ -587,20 +635,23 @@ class BoxOfficePredictor:
         # Ensure column order matches training exactly
         X = X.reindex(columns=training_cols, fill_value=0.0)
 
-        parts, weights = [], []
+        parts = []
         if self.lgb_models:
             p = np.mean([m.predict(X) for m in self.lgb_models], axis=0)
-            parts.append(p); weights.append(0.25)
+            parts.append(p)
         if self.xgb_models:
             dx = xgb.DMatrix(X)
             p = np.mean([m.predict(dx) for m in self.xgb_models], axis=0)
-            parts.append(p); weights.append(0.20)
+            parts.append(p)
         if self.cat_models:
             p = np.mean([m.predict(X) for m in self.cat_models], axis=0)
-            parts.append(p); weights.append(0.55)
+            parts.append(p)
 
-        wsum = sum(weights)
-        pred = sum(w / wsum * p for w, p in zip(weights, parts))
+        weights = np.array(getattr(self, "ensemble_weights", [1.0 / len(parts)] * len(parts)))
+        if len(weights) != len(parts):
+            weights = np.ones(len(parts)) / len(parts)
+        preds_stack = np.column_stack(parts)
+        pred = preds_stack.dot(weights)
         return np.expm1(pred)
 
     # ──────────────────────────────────────────────────────────────────
@@ -659,6 +710,7 @@ class BoxOfficePredictor:
                 "n_folds": self.n_folds,
                 "seed": self.seed,
                 "year_budgets": getattr(self, "year_budgets", {}),
+                "ensemble_weights": getattr(self, "ensemble_weights", []),
             }, f)
         logger.info(f"Model saved to {save_path}")
         return save_path
@@ -679,6 +731,7 @@ class BoxOfficePredictor:
         bp.target_encoders = data.get("target_encoders", {})
         bp.global_mean = data.get("global_mean", 16.0)
         bp.year_budgets = data.get("year_budgets", {})
+        bp.ensemble_weights = data.get("ensemble_weights", [])
         bp.FEATURE_COLS = data["FEATURE_COLS"]
         bp.cv_results = data["cv_results"]
         bp.fold_results = data["fold_results"]
