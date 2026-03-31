@@ -191,7 +191,7 @@ def render_home_page(movies_df, recommender, settings):
     with col2:
         st.write("")
         st.write("")
-        get_recs = st.button("Get Recommendations", type="primary", use_container_width=True)
+        get_recs = st.button("Get Recommendations", type="primary", width="stretch")
 
     if get_recs and selected_movie:
         with st.spinner("Finding similar movies..."):
@@ -337,7 +337,7 @@ def render_recommendations_page(movies_df, recommender, preprocessor, settings):
                         with shap_col2:
                             st.write("")
                             st.write("")
-                            run_shap = st.button("Run SHAP", type="primary", use_container_width=True)
+                            run_shap = st.button("Run SHAP", type="primary", width="stretch")
 
                         if run_shap and shap_target:
                             with st.spinner("Training SHAP surrogate model & computing values…"):
@@ -398,7 +398,7 @@ def render_recommendations_page(movies_df, recommender, preprocessor, settings):
                                                 yaxis=dict(autorange="reversed"),
                                                 height=500,
                                             )
-                                            st.plotly_chart(fig_fi, use_container_width=True, theme=None)
+                                            st.plotly_chart(fig_fi, width="stretch", theme=None)
 
                 else:
                     st.warning("No recommendations found.")
@@ -569,7 +569,7 @@ def render_analytics_page(movies_df, recommender=None):
             fig_bvr.add_shape(type="line", x0=0, y0=0, x1=max_v, y1=max_v,
                               line=dict(color="red", dash="dash"))
             fig_bvr.update_layout(height=400)
-            st.plotly_chart(fig_bvr, use_container_width=True, theme=None)
+            st.plotly_chart(fig_bvr, width="stretch", theme=None)
 
     with eda_col2:
         # Correlation heatmap
@@ -583,7 +583,7 @@ def render_analytics_page(movies_df, recommender=None):
                 color_continuous_scale="RdBu_r", template="plotly_white",
             )
             fig_corr.update_layout(height=400)
-            st.plotly_chart(fig_corr, use_container_width=True, theme=None)
+            st.plotly_chart(fig_corr, width="stretch", theme=None)
 
     # Genre Profit Ranking
     if "revenue" in df_viz.columns and "genres_list" in df_viz.columns:
@@ -596,7 +596,7 @@ def render_analytics_page(movies_df, recommender=None):
             template="plotly_white",
         )
         fig_gp.update_layout(height=450)
-        st.plotly_chart(fig_gp, use_container_width=True, theme=None)
+        st.plotly_chart(fig_gp, width="stretch", theme=None)
 
     # ── MovieLens Evaluation Section ──
     st.markdown("---")
@@ -669,7 +669,7 @@ def render_analytics_page(movies_df, recommender=None):
         for c in display_df.columns:
             if c != "method":
                 display_df[c] = display_df[c].apply(lambda x: f"{x:.4f}")
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+        st.dataframe(display_df, width="stretch", hide_index=True)
 
         # Bar chart comparison
         chart_metrics = ["precision@k", "recall@k", "ndcg@k", "map@k"]
@@ -687,7 +687,7 @@ def render_analytics_page(movies_df, recommender=None):
             fig.update_layout(
                 height=400, legend_title_text="Method", template="plotly_white",
             )
-            st.plotly_chart(fig, use_container_width=True, theme=None)
+            st.plotly_chart(fig, width="stretch", theme=None)
 
         # Beyond-accuracy chart
         ba_metrics = ["coverage", "novelty", "diversity"]
@@ -706,7 +706,7 @@ def render_analytics_page(movies_df, recommender=None):
             fig_ba.update_layout(
                 height=400, legend_title_text="Method",
             )
-            st.plotly_chart(fig_ba, use_container_width=True, theme=None)
+            st.plotly_chart(fig_ba, width="stretch", theme=None)
 
         st.success(f"✅ Evaluation complete — {results_df['n_eval_users'].iloc[0]} users, K={eval_k_display}")
 
@@ -765,7 +765,7 @@ def render_box_office_page(movies_df):
             template="plotly_white",
         )
         fig_folds.update_layout(height=350)
-        st.plotly_chart(fig_folds, use_container_width=True, theme=None)
+        st.plotly_chart(fig_folds, width="stretch", theme=None)
     else:
         _fallback_folds = []
         for i in range(1, 6):
@@ -780,7 +780,7 @@ def render_box_office_page(movies_df):
             template="plotly_white",
         )
         fig_folds.update_layout(height=350)
-        st.plotly_chart(fig_folds, use_container_width=True, theme=None)
+        st.plotly_chart(fig_folds, width="stretch", theme=None)
 
     # 2) Learning curves (first fold)
     def _subsample(curve, n=300):
@@ -808,7 +808,7 @@ def render_box_office_page(movies_df):
                 xs, ys = _subsample(val_c)
                 fig_lgb.add_trace(go.Scatter(x=xs, y=ys, mode="lines", name="Val Loss", line=dict(color="#e5383b", width=2)))
             fig_lgb.update_layout(title="LightGBM — Train vs Validation RMSE", xaxis_title="Boosting Round", yaxis_title="RMSE", template="plotly_white", height=380)
-            st.plotly_chart(fig_lgb, use_container_width=True, theme=None)
+            st.plotly_chart(fig_lgb, width="stretch", theme=None)
 
         if has_xgb:
             fig_xgb = go.Figure()
@@ -821,7 +821,7 @@ def render_box_office_page(movies_df):
                 xs, ys = _subsample(val_c)
                 fig_xgb.add_trace(go.Scatter(x=xs, y=ys, mode="lines", name="Val Loss", line=dict(color="#e5383b", width=2)))
             fig_xgb.update_layout(title="XGBoost — Train vs Validation RMSE", xaxis_title="Boosting Round", yaxis_title="RMSE", template="plotly_white", height=380)
-            st.plotly_chart(fig_xgb, use_container_width=True, theme=None)
+            st.plotly_chart(fig_xgb, width="stretch", theme=None)
 
         if has_cat:
             fig_cat = go.Figure()
@@ -834,7 +834,7 @@ def render_box_office_page(movies_df):
                 xs, ys = _subsample(val_c)
                 fig_cat.add_trace(go.Scatter(x=xs, y=ys, mode="lines", name="Val Loss", line=dict(color="#e5383b", width=2)))
             fig_cat.update_layout(title="CatBoost — Train vs Validation RMSE", xaxis_title="Iteration", yaxis_title="RMSE", template="plotly_white", height=380)
-            st.plotly_chart(fig_cat, use_container_width=True, theme=None)
+            st.plotly_chart(fig_cat, width="stretch", theme=None)
     else:
         st.markdown("#### 📈 Train Loss & Val Loss (Fold 1)")
         rng_curve = np.random.RandomState(99)
@@ -847,7 +847,7 @@ def render_box_office_page(movies_df):
             fig_c.add_trace(go.Scatter(x=xs, y=base_train.tolist(), mode="lines", name="Train Loss", line=dict(color=color, width=2)))
             fig_c.add_trace(go.Scatter(x=xs, y=base_val.tolist(), mode="lines", name="Val Loss", line=dict(color="#e5383b", width=2)))
             fig_c.update_layout(title=f"{model_name} — Train vs Validation RMSE", xaxis_title="Boosting Round", yaxis_title="RMSE", template="plotly_white", height=380)
-            st.plotly_chart(fig_c, use_container_width=True, theme=None)
+            st.plotly_chart(fig_c, width="stretch", theme=None)
 
     # Feature importance
     if bp:
@@ -860,7 +860,7 @@ def render_box_office_page(movies_df):
                 template="plotly_white",
             )
             fig_fi.update_layout(yaxis=dict(autorange="reversed"), height=450)
-            st.plotly_chart(fig_fi, use_container_width=True, theme=None)
+            st.plotly_chart(fig_fi, width="stretch", theme=None)
     else:
         _fi_features = ["budget_log", "popularity_log", "budget_x_pop", "company_te", "director_te",
                         "ext_rating", "popularity2_log", "genre_combo_te", "in_collection",
@@ -875,7 +875,7 @@ def render_box_office_page(movies_df):
             template="plotly_white",
         )
         fig_fi.update_layout(yaxis=dict(autorange="reversed"), height=450)
-        st.plotly_chart(fig_fi, use_container_width=True, theme=None)
+        st.plotly_chart(fig_fi, width="stretch", theme=None)
 
     # Actual vs Predicted scatter — two colors, Pred/Actual in 0.78-0.82
     try:
@@ -910,7 +910,7 @@ def render_box_office_page(movies_df):
         template="plotly_white", height=500,
         legend=dict(x=0.02, y=0.98),
     )
-    st.plotly_chart(fig_sc, use_container_width=True, theme=None)
+    st.plotly_chart(fig_sc, width="stretch", theme=None)
 
     st.markdown("---")
 

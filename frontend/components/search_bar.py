@@ -196,7 +196,7 @@ class SearchBar:
                     if st.button(
                         movie[:15] + "..." if len(movie) > 15 else movie,
                         key=f"{key}_quick_{i}",
-                        use_container_width=True
+                        width="stretch"
                     ):
                         return movie
 

@@ -34,7 +34,7 @@ class Charts:
             polar=dict(radialaxis=dict(visible=True, range=[0, 1])),
             template=TEMPLATE, title=title, showlegend=False,
         )
-        st.plotly_chart(fig, use_container_width=True, theme=None)
+        st.plotly_chart(fig, width="stretch", theme=None)
 
     @staticmethod
     def genre_distribution(genre_counts: Dict[str, int], title: str = "Genre Distribution"):
@@ -50,7 +50,7 @@ class Charts:
             title=title, template=TEMPLATE,
             yaxis=dict(autorange='reversed'), height=400,
         )
-        st.plotly_chart(fig, use_container_width=True, theme=None)
+        st.plotly_chart(fig, width="stretch", theme=None)
 
     @staticmethod
     def rating_histogram(ratings: List[float], title: str = "Rating Distribution"):
@@ -63,7 +63,7 @@ class Charts:
             xaxis=dict(title='Rating', range=[0, 10]),
             yaxis=dict(title='Count'), bargap=0.1,
         )
-        st.plotly_chart(fig, use_container_width=True, theme=None)
+        st.plotly_chart(fig, width="stretch", theme=None)
 
     @staticmethod
     def movies_timeline(year_counts: Dict[int, int], title: str = "Movies Per Year"):
@@ -80,7 +80,7 @@ class Charts:
             title=title, template=TEMPLATE,
             xaxis_title='Year', yaxis_title='Number of Movies',
         )
-        st.plotly_chart(fig, use_container_width=True, theme=None)
+        st.plotly_chart(fig, width="stretch", theme=None)
 
     @staticmethod
     def feature_importance(features: List[str], importances: List[float],
@@ -97,7 +97,7 @@ class Charts:
             title=title, template=TEMPLATE,
             yaxis=dict(autorange='reversed'), height=400,
         )
-        st.plotly_chart(fig, use_container_width=True, theme=None)
+        st.plotly_chart(fig, width="stretch", theme=None)
 
     @staticmethod
     def similarity_heatmap(similarity_matrix: np.ndarray, labels: List[str],
@@ -110,7 +110,7 @@ class Charts:
             title=title, template=TEMPLATE,
             xaxis=dict(tickangle=45), height=500,
         )
-        st.plotly_chart(fig, use_container_width=True, theme=None)
+        st.plotly_chart(fig, width="stretch", theme=None)
 
     @staticmethod
     def comparison_bar(data: Dict[str, Dict[str, float]],
@@ -129,4 +129,4 @@ class Charts:
             title=title, template=TEMPLATE,
             barmode='group', yaxis_title='Similarity Score',
         )
-        st.plotly_chart(fig, use_container_width=True, theme=None)
+        st.plotly_chart(fig, width="stretch", theme=None)
