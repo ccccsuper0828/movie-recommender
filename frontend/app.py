@@ -719,7 +719,7 @@ def render_box_office_page(movies_df):
         '<p style="color:#a3a3a3;font-size:1rem;margin-bottom:24px;">'
         'LightGBM + XGBoost ensemble trained on TMDB features '
         '(budget, popularity, vote, genres, runtime, release date…).<br>'
-        'Reference: Movie-Analysis project — Kaggle top-7 %.</p>',
+        'Reference: Movie-Analysis project — Kaggle top-15 %.</p>',
         unsafe_allow_html=True,
     )
 
