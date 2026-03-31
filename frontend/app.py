@@ -889,24 +889,33 @@ def render_box_office_page(movies_df):
                 )
                 st.plotly_chart(fig_fi, use_container_width=True, theme=None)
 
-            # Actual vs Predicted scatter
+            # Actual vs Predicted scatter — two colors
             kaggle_train, _ = bp.load_data()
             sample = kaggle_train.sample(min(500, len(kaggle_train)), random_state=42).copy()
             sample["predicted_revenue"] = bp.predict(sample)
+            sample = sample.sort_values("revenue").reset_index(drop=True)
+            sample["idx"] = range(len(sample))
 
-            fig_sc = px.scatter(
-                sample, x="revenue", y="predicted_revenue",
-                hover_name="title", opacity=0.6,
-                labels={"revenue": "Actual Revenue ($)", "predicted_revenue": "Predicted ($)"},
-                title="Actual vs Predicted Revenue (Kaggle train sample)",
-                template="plotly_white",
+            fig_sc = go.Figure()
+            fig_sc.add_trace(go.Scatter(
+                x=sample["idx"], y=sample["revenue"],
+                mode="markers", name="Actual",
+                marker=dict(color="#3fb950", size=6, opacity=0.7),
+                text=sample["title"], hovertemplate="%{text}<br>Actual: $%{y:,.0f}<extra></extra>",
+            ))
+            fig_sc.add_trace(go.Scatter(
+                x=sample["idx"], y=sample["predicted_revenue"],
+                mode="markers", name="Predicted",
+                marker=dict(color="#e5383b", size=6, opacity=0.7),
+                text=sample["title"], hovertemplate="%{text}<br>Predicted: $%{y:,.0f}<extra></extra>",
+            ))
+            fig_sc.update_layout(
+                title="Actual vs Predicted Revenue (sorted by actual revenue)",
+                xaxis_title="Movie Index (sorted by revenue)",
+                yaxis_title="Revenue ($)",
+                template="plotly_white", height=500,
+                legend=dict(x=0.02, y=0.98),
             )
-            max_val = max(sample["revenue"].max(), sample["predicted_revenue"].max())
-            fig_sc.add_shape(
-                type="line", x0=0, y0=0, x1=max_val, y1=max_val,
-                line=dict(color="#e5383b", dash="dash"),
-            )
-            fig_sc.update_layout(height=500)
             st.plotly_chart(fig_sc, use_container_width=True, theme=None)
 
         except Exception as e:
