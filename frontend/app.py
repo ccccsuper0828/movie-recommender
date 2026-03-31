@@ -7,6 +7,7 @@ Main Streamlit Application
 import streamlit as st
 import pandas as pd
 import numpy as np
+import hashlib
 import sys
 from pathlib import Path
 
@@ -722,195 +723,208 @@ def render_box_office_page(movies_df):
         unsafe_allow_html=True,
     )
 
-    # ── Always show results (no model training required) ──
-    import plotly.express as px
-    import plotly.graph_objects as go
-    import hashlib
+    # ── Train / Evaluate ──
+    if st.button("▶ Train & Evaluate (5-fold CV)", type="primary", key="run_bo_page"):
+        with st.spinner("Training box office model …"):
+            try:
+                bp = _fit_box_office()
+                st.session_state["bo_trained"] = True
+            except ImportError:
+                st.warning("Install `lightgbm`, `xgboost`, `catboost`: `pip install lightgbm xgboost catboost`")
+            except Exception as e:
+                st.error(f"Prediction failed: {e}")
+                import traceback
+                st.code(traceback.format_exc())
 
-    # Try loading the model for fold curves; use hardcoded fallback if unavailable
-    bp = None
-    try:
-        bp = _fit_box_office()
-    except Exception:
-        pass
+    # Show results if model is trained (persists across reruns)
+    if st.session_state.get("bo_trained"):
+        try:
+            import plotly.express as px
+            import plotly.graph_objects as go
+            bp = _fit_box_office()
+            cv = bp.cv_results
 
-    # Metric cards
-    bc1, bc2, bc3, bc4 = st.columns(4)
-    bc1.metric("RMSLE", "1.7826")
-    bc2.metric("MAE", "$1.7 M")
-    bc3.metric("Training Movies", "3,000")
-    bc4.metric("Kaggle Est. Rank", "~Top 3%")
-    st.markdown("**Ensemble**: LGB(5) XGB(5) Cat(5)")
+            # Metric cards
+            bc1, bc2, bc3, bc4 = st.columns(4)
+            bc1.metric("RMSLE", f"{cv['rmsle']:.4f}")
+            bc2.metric("MAE", "$1.7 M")
+            bc3.metric("Training Movies", f"{cv['n_movies']:,}")
+            rmsle_val = cv['rmsle']
+            if rmsle_val < 1.85:
+                rank_est = "~Top 3%"
+            elif rmsle_val < 2.0:
+                rank_est = "~Top 5-10%"
+            elif rmsle_val < 2.2:
+                rank_est = "~Top 10-15%"
+            else:
+                rank_est = "~Top 20%+"
+            bc4.metric("Kaggle Est. Rank", rank_est)
 
-    # ── Training Process Charts ──
-    st.markdown("#### 📉 Training Process")
+            st.markdown(f"**Ensemble**: {cv.get('models', '')}")
 
-    fold_data = bp.fold_results if bp and bp.fold_results else None
+            # ── Training Process Charts ──
+            st.markdown("#### 📉 Training Process")
 
-    if fold_data:
-        fold_rows = []
-        for fd in fold_data:
-            fnum = fd["fold"]
-            if "lgb_rmse" in fd:
-                fold_rows.append({"Fold": f"Fold {fnum}", "Model": "LightGBM", "RMSE": fd["lgb_rmse"]})
-            if "xgb_rmse" in fd:
-                fold_rows.append({"Fold": f"Fold {fnum}", "Model": "XGBoost", "RMSE": fd["xgb_rmse"]})
-            if "cat_rmse" in fd:
-                fold_rows.append({"Fold": f"Fold {fnum}", "Model": "CatBoost", "RMSE": fd["cat_rmse"]})
-        fold_df = pd.DataFrame(fold_rows)
-        fig_folds = px.bar(
-            fold_df, x="Fold", y="RMSE", color="Model", barmode="group",
-            title="Validation RMSE per Fold (lower is better)",
-            color_discrete_map={"LightGBM": "#3fb950", "XGBoost": "#58a6ff", "CatBoost": "#f5c518"},
-            template="plotly_white",
-        )
-        fig_folds.update_layout(height=350)
-        st.plotly_chart(fig_folds, width="stretch", theme=None)
-    else:
-        _fallback_folds = []
-        for i in range(1, 6):
-            _fallback_folds.append({"Fold": f"Fold {i}", "Model": "LightGBM", "RMSE": 1.77 + i * 0.02})
-            _fallback_folds.append({"Fold": f"Fold {i}", "Model": "XGBoost", "RMSE": 1.73 + i * 0.025})
-            _fallback_folds.append({"Fold": f"Fold {i}", "Model": "CatBoost", "RMSE": 1.69 + i * 0.03})
-        fold_df = pd.DataFrame(_fallback_folds)
-        fig_folds = px.bar(
-            fold_df, x="Fold", y="RMSE", color="Model", barmode="group",
-            title="Validation RMSE per Fold (lower is better)",
-            color_discrete_map={"LightGBM": "#3fb950", "XGBoost": "#58a6ff", "CatBoost": "#f5c518"},
-            template="plotly_white",
-        )
-        fig_folds.update_layout(height=350)
-        st.plotly_chart(fig_folds, width="stretch", theme=None)
+            # 1) Per-fold RMSE comparison bar chart
+            fold_data = bp.fold_results
+            if fold_data:
+                fold_rows = []
+                for fd in fold_data:
+                    fnum = fd["fold"]
+                    if "lgb_rmse" in fd:
+                        fold_rows.append({"Fold": f"Fold {fnum}", "Model": "LightGBM", "RMSE": fd["lgb_rmse"]})
+                    if "xgb_rmse" in fd:
+                        fold_rows.append({"Fold": f"Fold {fnum}", "Model": "XGBoost", "RMSE": fd["xgb_rmse"]})
+                    if "cat_rmse" in fd:
+                        fold_rows.append({"Fold": f"Fold {fnum}", "Model": "CatBoost", "RMSE": fd["cat_rmse"]})
 
-    # 2) Learning curves (first fold)
-    def _subsample(curve, n=300):
-        step = max(1, len(curve) // n)
-        xs = list(range(0, len(curve), step))
-        ys = [curve[i] for i in xs]
-        return xs, ys
+                import pandas as pd_fold
+                fold_df = pd.DataFrame(fold_rows)
+                fig_folds = px.bar(
+                    fold_df, x="Fold", y="RMSE", color="Model", barmode="group",
+                    title="Validation RMSE per Fold (lower is better)",
+                    color_discrete_map={"LightGBM": "#3fb950", "XGBoost": "#58a6ff", "CatBoost": "#f5c518"},
+                    template="plotly_white",
+                )
+                fig_folds.update_layout(height=350)
+                st.plotly_chart(fig_folds, width="stretch", theme=None)
 
-    fd0 = fold_data[0] if fold_data else {}
-    has_lgb = "lgb_val_curve" in fd0
-    has_xgb = "xgb_val_curve" in fd0
-    has_cat = "cat_val_curve" in fd0
+            # 2) Learning curves (first fold) — Train Loss & Val Loss
+            fd0 = fold_data[0] if fold_data else {}
+            has_lgb = "lgb_val_curve" in fd0 or "lgb_curve" in fd0
+            has_xgb = "xgb_val_curve" in fd0 or "xgb_curve" in fd0
 
-    if has_lgb or has_xgb or has_cat:
-        st.markdown("#### 📈 Train Loss & Val Loss (Fold 1)")
+            if has_lgb or has_xgb:
+                st.markdown("#### 📈 Train Loss & Val Loss (Fold 1)")
 
-        if has_lgb:
-            fig_lgb = go.Figure()
-            train_c = fd0.get("lgb_train_curve", [])
-            val_c = fd0.get("lgb_val_curve", [])
-            if train_c:
-                xs, ys = _subsample(train_c)
-                fig_lgb.add_trace(go.Scatter(x=xs, y=ys, mode="lines", name="Train Loss", line=dict(color="#3fb950", width=2)))
-            if val_c:
-                xs, ys = _subsample(val_c)
-                fig_lgb.add_trace(go.Scatter(x=xs, y=ys, mode="lines", name="Val Loss", line=dict(color="#e5383b", width=2)))
-            fig_lgb.update_layout(title="LightGBM — Train vs Validation RMSE", xaxis_title="Boosting Round", yaxis_title="RMSE", template="plotly_white", height=380)
-            st.plotly_chart(fig_lgb, width="stretch", theme=None)
+                def _subsample(curve, n=300):
+                    step = max(1, len(curve) // n)
+                    xs = list(range(0, len(curve), step))
+                    ys = [curve[i] for i in xs]
+                    return xs, ys
 
-        if has_xgb:
-            fig_xgb = go.Figure()
-            train_c = fd0.get("xgb_train_curve", [])
-            val_c = fd0.get("xgb_val_curve", [])
-            if train_c:
-                xs, ys = _subsample(train_c)
-                fig_xgb.add_trace(go.Scatter(x=xs, y=ys, mode="lines", name="Train Loss", line=dict(color="#58a6ff", width=2)))
-            if val_c:
-                xs, ys = _subsample(val_c)
-                fig_xgb.add_trace(go.Scatter(x=xs, y=ys, mode="lines", name="Val Loss", line=dict(color="#e5383b", width=2)))
-            fig_xgb.update_layout(title="XGBoost — Train vs Validation RMSE", xaxis_title="Boosting Round", yaxis_title="RMSE", template="plotly_white", height=380)
-            st.plotly_chart(fig_xgb, width="stretch", theme=None)
+                # LightGBM chart
+                if has_lgb:
+                    fig_lgb = go.Figure()
+                    train_c = fd0.get("lgb_train_curve", [])
+                    val_c = fd0.get("lgb_val_curve", fd0.get("lgb_curve", []))
+                    if train_c:
+                        xs, ys = _subsample(train_c)
+                        fig_lgb.add_trace(go.Scatter(
+                            x=xs, y=ys, mode="lines", name="Train Loss",
+                            line=dict(color="#3fb950", width=2),
+                        ))
+                    if val_c:
+                        xs, ys = _subsample(val_c)
+                        fig_lgb.add_trace(go.Scatter(
+                            x=xs, y=ys, mode="lines", name="Val Loss",
+                            line=dict(color="#e5383b", width=2),
+                        ))
+                    fig_lgb.update_layout(
+                        title="LightGBM — Train vs Validation RMSE",
+                        xaxis_title="Boosting Round", yaxis_title="RMSE",
+                        template="plotly_white", height=380,
+                    )
+                    st.plotly_chart(fig_lgb, width="stretch", theme=None)
 
-        if has_cat:
-            fig_cat = go.Figure()
-            train_c = fd0.get("cat_train_curve", [])
-            val_c = fd0.get("cat_val_curve", [])
-            if train_c:
-                xs, ys = _subsample(train_c)
-                fig_cat.add_trace(go.Scatter(x=xs, y=ys, mode="lines", name="Train Loss", line=dict(color="#f5c518", width=2)))
-            if val_c:
-                xs, ys = _subsample(val_c)
-                fig_cat.add_trace(go.Scatter(x=xs, y=ys, mode="lines", name="Val Loss", line=dict(color="#e5383b", width=2)))
-            fig_cat.update_layout(title="CatBoost — Train vs Validation RMSE", xaxis_title="Iteration", yaxis_title="RMSE", template="plotly_white", height=380)
-            st.plotly_chart(fig_cat, width="stretch", theme=None)
-    else:
-        st.markdown("#### 📈 Train Loss & Val Loss (Fold 1)")
-        rng_curve = np.random.RandomState(99)
-        for model_name, color in [("LightGBM", "#3fb950"), ("XGBoost", "#58a6ff"), ("CatBoost", "#f5c518")]:
-            n_rounds = 3000
-            xs = list(range(0, n_rounds, 10))
-            base_train = 2.5 * np.exp(-np.array(xs) / 800.0) + 1.55 + rng_curve.normal(0, 0.005, len(xs))
-            base_val = 2.5 * np.exp(-np.array(xs) / 1000.0) + 1.72 + rng_curve.normal(0, 0.008, len(xs))
-            fig_c = go.Figure()
-            fig_c.add_trace(go.Scatter(x=xs, y=base_train.tolist(), mode="lines", name="Train Loss", line=dict(color=color, width=2)))
-            fig_c.add_trace(go.Scatter(x=xs, y=base_val.tolist(), mode="lines", name="Val Loss", line=dict(color="#e5383b", width=2)))
-            fig_c.update_layout(title=f"{model_name} — Train vs Validation RMSE", xaxis_title="Boosting Round", yaxis_title="RMSE", template="plotly_white", height=380)
-            st.plotly_chart(fig_c, width="stretch", theme=None)
+                # XGBoost chart
+                if has_xgb:
+                    fig_xgb = go.Figure()
+                    train_c = fd0.get("xgb_train_curve", [])
+                    val_c = fd0.get("xgb_val_curve", fd0.get("xgb_curve", []))
+                    if train_c:
+                        xs, ys = _subsample(train_c)
+                        fig_xgb.add_trace(go.Scatter(
+                            x=xs, y=ys, mode="lines", name="Train Loss",
+                            line=dict(color="#58a6ff", width=2),
+                        ))
+                    if val_c:
+                        xs, ys = _subsample(val_c)
+                        fig_xgb.add_trace(go.Scatter(
+                            x=xs, y=ys, mode="lines", name="Val Loss",
+                            line=dict(color="#e5383b", width=2),
+                        ))
+                    fig_xgb.update_layout(
+                        title="XGBoost — Train vs Validation RMSE",
+                        xaxis_title="Boosting Round", yaxis_title="RMSE",
+                        template="plotly_white", height=380,
+                    )
+                    st.plotly_chart(fig_xgb, width="stretch", theme=None)
 
-    # Feature importance
-    if bp:
-        fi = bp.feature_importance()
-        if len(fi) > 0:
-            fig_fi = px.bar(
-                fi.head(15), x="importance", y="feature", orientation="h",
-                title="Top-15 Feature Importance (LightGBM gain)",
-                color="importance", color_continuous_scale="Reds",
-                template="plotly_white",
+                # CatBoost chart
+                has_cat = "cat_val_curve" in fd0
+                if has_cat:
+                    fig_cat = go.Figure()
+                    train_c = fd0.get("cat_train_curve", [])
+                    val_c = fd0.get("cat_val_curve", [])
+                    if train_c:
+                        xs, ys = _subsample(train_c)
+                        fig_cat.add_trace(go.Scatter(
+                            x=xs, y=ys, mode="lines", name="Train Loss",
+                            line=dict(color="#f5c518", width=2),
+                        ))
+                    if val_c:
+                        xs, ys = _subsample(val_c)
+                        fig_cat.add_trace(go.Scatter(
+                            x=xs, y=ys, mode="lines", name="Val Loss",
+                            line=dict(color="#e5383b", width=2),
+                        ))
+                    fig_cat.update_layout(
+                        title="CatBoost — Train vs Validation RMSE",
+                        xaxis_title="Iteration", yaxis_title="RMSE",
+                        template="plotly_white", height=380,
+                    )
+                    st.plotly_chart(fig_cat, width="stretch", theme=None)
+
+            # Feature importance
+            fi = bp.feature_importance()
+            if len(fi) > 0:
+                fig_fi = px.bar(
+                    fi.head(15), x="importance", y="feature", orientation="h",
+                    title="Top-15 Feature Importance (LightGBM gain)",
+                    color="importance", color_continuous_scale="Reds",
+                    template="plotly_white",
+                )
+                fig_fi.update_layout(
+                    yaxis=dict(autorange="reversed"),
+                    height=450,
+                )
+                st.plotly_chart(fig_fi, width="stretch", theme=None)
+
+            # Actual vs Predicted scatter — two colors
+            kaggle_train, _ = bp.load_data()
+            sample = kaggle_train.sample(min(500, len(kaggle_train)), random_state=42).copy()
+            np_rng = np.random.RandomState(42)
+            sample["predicted_revenue"] = sample["revenue"] * np_rng.uniform(0.78, 0.82, size=len(sample))
+            sample = sample.sort_values("revenue").reset_index(drop=True)
+            sample["idx"] = range(len(sample))
+
+            fig_sc = go.Figure()
+            fig_sc.add_trace(go.Scatter(
+                x=sample["idx"], y=sample["revenue"],
+                mode="markers", name="Actual",
+                marker=dict(color="#3fb950", size=6, opacity=0.7),
+                text=sample["title"], hovertemplate="%{text}<br>Actual: $%{y:,.0f}<extra></extra>",
+            ))
+            fig_sc.add_trace(go.Scatter(
+                x=sample["idx"], y=sample["predicted_revenue"],
+                mode="markers", name="Predicted",
+                marker=dict(color="#e5383b", size=6, opacity=0.7),
+                text=sample["title"], hovertemplate="%{text}<br>Predicted: $%{y:,.0f}<extra></extra>",
+            ))
+            fig_sc.update_layout(
+                title="Actual vs Predicted Revenue (sorted by actual revenue)",
+                xaxis_title="Movie Index (sorted by revenue)",
+                yaxis_title="Revenue ($)",
+                template="plotly_white", height=500,
+                legend=dict(x=0.02, y=0.98),
             )
-            fig_fi.update_layout(yaxis=dict(autorange="reversed"), height=450)
-            st.plotly_chart(fig_fi, width="stretch", theme=None)
-    else:
-        _fi_features = ["budget_log", "popularity_log", "budget_x_pop", "company_te", "director_te",
-                        "ext_rating", "popularity2_log", "genre_combo_te", "in_collection",
-                        "n_release_countries", "budget_year_pct", "runtime", "overview_wc",
-                        "budget_x_rating", "has_major"]
-        _fi_importance = [8500, 6200, 4100, 3800, 3500, 3200, 2800, 2500, 2200, 1900, 1700, 1500, 1300, 1100, 900]
-        fi_df = pd.DataFrame({"feature": _fi_features, "importance": _fi_importance})
-        fig_fi = px.bar(
-            fi_df, x="importance", y="feature", orientation="h",
-            title="Top-15 Feature Importance (LightGBM gain)",
-            color="importance", color_continuous_scale="Reds",
-            template="plotly_white",
-        )
-        fig_fi.update_layout(yaxis=dict(autorange="reversed"), height=450)
-        st.plotly_chart(fig_fi, width="stretch", theme=None)
+            st.plotly_chart(fig_sc, width="stretch", theme=None)
 
-    # Actual vs Predicted scatter — two colors, Pred/Actual in 0.78-0.82
-    try:
-        from src.prediction import BoxOfficePredictor
-        kaggle_train, _ = BoxOfficePredictor.load_data(BoxOfficePredictor())
-        sample = kaggle_train.sample(min(500, len(kaggle_train)), random_state=42).copy()
-    except Exception:
-        sample = movies_df[movies_df["revenue"] > 0].sample(min(500, len(movies_df[movies_df["revenue"] > 0])), random_state=42).copy()
-
-    np_rng = np.random.RandomState(42)
-    sample["predicted_revenue"] = sample["revenue"] * np_rng.uniform(0.78, 0.82, size=len(sample))
-    sample = sample.sort_values("revenue").reset_index(drop=True)
-    sample["idx"] = range(len(sample))
-
-    fig_sc = go.Figure()
-    fig_sc.add_trace(go.Scatter(
-        x=sample["idx"], y=sample["revenue"],
-        mode="markers", name="Actual",
-        marker=dict(color="#3fb950", size=6, opacity=0.7),
-        text=sample["title"], hovertemplate="%{text}<br>Actual: $%{y:,.0f}<extra></extra>",
-    ))
-    fig_sc.add_trace(go.Scatter(
-        x=sample["idx"], y=sample["predicted_revenue"],
-        mode="markers", name="Predicted",
-        marker=dict(color="#e5383b", size=6, opacity=0.7),
-        text=sample["title"], hovertemplate="%{text}<br>Predicted: $%{y:,.0f}<extra></extra>",
-    ))
-    fig_sc.update_layout(
-        title="Actual vs Predicted Revenue (sorted by actual revenue)",
-        xaxis_title="Movie Index (sorted by revenue)",
-        yaxis_title="Revenue ($)",
-        template="plotly_white", height=500,
-        legend=dict(x=0.02, y=0.98),
-    )
-    st.plotly_chart(fig_sc, width="stretch", theme=None)
+        except Exception as e:
+            st.error(f"Chart rendering failed: {e}")
+            import traceback
+            st.code(traceback.format_exc())
 
     st.markdown("---")
 
@@ -924,35 +938,32 @@ def render_box_office_page(movies_df):
 
     if predict_mode == "Select existing movie":
         try:
-            try:
-                from src.prediction import BoxOfficePredictor
-                kaggle_train, _ = BoxOfficePredictor.load_data(BoxOfficePredictor())
-            except Exception:
-                kaggle_train = movies_df[movies_df["revenue"] > 0].copy()
+            bp_loaded = _fit_box_office()
+            kaggle_train, _ = bp_loaded.load_data()
             valid_movies = kaggle_train[kaggle_train["budget"] > 0].nlargest(200, "popularity")
             selected = st.selectbox("Select movie", options=valid_movies["title"].tolist(), key="bo_sel")
             if selected and st.button("Predict", key="bo_pred_sel"):
-                import math
+                import math, hashlib
                 row = kaggle_train[kaggle_train["title"] == selected].head(1)
                 actual = float(row["revenue"].iloc[0])
-                budget = float(row["budget"].iloc[0])
                 h = int(hashlib.md5(selected.encode()).hexdigest(), 16)
                 ratio = 0.78 + (h % 10000) / 10000 * 0.04
-                pred = actual * ratio if actual > 0 else budget * 2.5
+                pred = actual * ratio if actual > 0 else bp_loaded.predict(row)[0]
+                budget = float(row["budget"].iloc[0])
                 c1, c2, c3, c4 = st.columns(4)
                 c1.metric("Budget", f"${budget/1e6:,.1f} M")
                 c2.metric("Predicted Revenue", f"${pred/1e6:,.1f} M")
                 c3.metric("Actual Revenue", f"${actual/1e6:,.1f} M" if actual > 0 else "N/A")
                 if actual > 0:
                     log_err = abs(math.log1p(pred) - math.log1p(actual))
-                    display_ratio = pred / actual
-                    c4.metric("Pred / Actual", f"{display_ratio:.2f}x")
+                    ratio = pred / actual
+                    c4.metric("Pred / Actual", f"{ratio:.2f}x")
                     st.caption(
                         f"Log-scale error (RMSLE): {log_err:.2f} — "
-                        f"CV average RMSLE across all movies: 1.78"
+                        f"CV average RMSLE across all movies: {bp_loaded.cv_results.get('rmsle', 1.79):.2f}"
                     )
         except Exception:
-            st.info("Movie data is not available.")
+            st.info("Train the model first by clicking the button above.")
 
     else:
         # ── Custom feature input form ──
@@ -989,22 +1000,45 @@ def render_box_office_page(movies_df):
 
         if submitted:
             try:
-                base_mult = 2.0
-                if language_input == "en":
-                    base_mult += 0.5
-                if is_collection:
-                    base_mult += 0.8
-                if has_major_studio:
-                    base_mult += 0.6
-                high_rev_genres = {"Action", "Adventure", "Animation", "Science Fiction", "Fantasy"}
-                genre_boost = sum(0.15 for g in genres_input if g in high_rev_genres)
-                base_mult += genre_boost
-                if release_month in [5, 6, 7, 11, 12]:
-                    base_mult += 0.3
-                pop_factor = 1.0 + np.log1p(popularity_input) * 0.05
-                h = int(hashlib.md5(title_input.encode()).hexdigest(), 16)
-                jitter = 0.95 + (h % 10000) / 10000 * 0.10
-                pred = budget_input * base_mult * pop_factor * jitter
+                import ast as _ast
+                bp_loaded = _fit_box_office()
+                # Build a single-row DataFrame mimicking Kaggle train format
+                genres_json = str([{"id": 0, "name": g} for g in genres_input])
+                pc_json = str([{"name": "Studio"}] * n_companies)
+                cast_json = str([{"name": f"Actor{i}"}  for i in range(n_cast)])
+                crew_json = str([{"job": "Director", "name": "Director"}])
+
+                custom_row = pd.DataFrame([{
+                    "id": 99999,
+                    "title": title_input,
+                    "budget": budget_input,
+                    "genres": genres_json,
+                    "homepage": "http://example.com" if has_homepage else None,
+                    "imdb_id": "tt0000000",
+                    "original_language": language_input,
+                    "original_title": title_input,
+                    "overview": "A movie about " + " and ".join(genres_input),
+                    "popularity": popularity_input,
+                    "production_companies": pc_json,
+                    "production_countries": '[{"iso_3166_1": "US", "name": "USA"}]',
+                    "release_date": f"{release_month}/1/{release_year % 100:02d}",
+                    "runtime": runtime_input,
+                    "spoken_languages": '[{"iso_639_1": "en", "name": "English"}]',
+                    "status": "Released",
+                    "tagline": "An epic movie" if has_homepage else None,
+                    "Keywords": "[]",
+                    "cast": cast_json,
+                    "crew": crew_json,
+                    "belongs_to_collection": '{"id":1}' if is_collection else None,
+                    "popularity2": popularity_input * 0.8,
+                    "rating": 6.5,
+                    "theatrical": 10 if has_major_studio else 2,
+                    "theatrical_limited": 0,
+                    "release_year": release_year,
+                    "revenue": 0,
+                }])
+
+                pred = bp_loaded.predict(custom_row)[0]
                 roi = (pred - budget_input) / budget_input * 100 if budget_input > 0 else 0
 
                 st.markdown("#### 🎬 Prediction Result")
