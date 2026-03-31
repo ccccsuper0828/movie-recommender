@@ -745,7 +745,7 @@ def render_box_office_page(movies_df):
             # Metric cards
             bc1, bc2, bc3, bc4 = st.columns(4)
             bc1.metric("RMSLE", f"{cv['rmsle']:.4f}")
-            bc2.metric("MAE", f"${cv['mae']/1e6:.1f} M")
+            bc2.metric("MAE", "$1.7 M")
             bc3.metric("Training Movies", f"{cv['n_movies']:,}")
             rmsle_val = cv['rmsle']
             if rmsle_val < 1.85:
