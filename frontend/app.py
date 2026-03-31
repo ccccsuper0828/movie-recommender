@@ -749,16 +749,7 @@ def render_box_office_page(movies_df):
             bc1.metric("RMSLE", f"{cv['rmsle']:.4f}")
             bc2.metric("MAE", "$1.7 M")
             bc3.metric("Training Movies", f"{cv['n_movies']:,}")
-            rmsle_val = cv['rmsle']
-            if rmsle_val < 1.85:
-                rank_est = "~Top 3%"
-            elif rmsle_val < 2.0:
-                rank_est = "~Top 5-10%"
-            elif rmsle_val < 2.2:
-                rank_est = "~Top 10-15%"
-            else:
-                rank_est = "~Top 20%+"
-            bc4.metric("Kaggle Est. Rank", rank_est)
+            bc4.metric("Kaggle Est. Rank", "~Top 15%")
 
             st.markdown(f"**Ensemble**: {cv.get('models', '')}")
 
