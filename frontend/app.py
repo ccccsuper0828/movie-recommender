@@ -140,16 +140,15 @@ def _get_knn_svd_recs(movies_df, title, top_n):
 
 
 @st.cache_resource
-def _fit_box_office(_version=7):
+def _fit_box_office(_version=8):
     """Load saved model or train from scratch."""
     from src.prediction import BoxOfficePredictor
-    # Try loading saved model first (instant)
     try:
         bp = BoxOfficePredictor.load()
-        return bp
-    except FileNotFoundError:
+        if bp.FEATURE_COLS and "budget_pct_rank" in bp.FEATURE_COLS:
+            return bp
+    except (FileNotFoundError, Exception):
         pass
-    # No saved model → train and save
     bp = BoxOfficePredictor(n_folds=5, seed=2019)
     bp.fit()
     bp.save()
